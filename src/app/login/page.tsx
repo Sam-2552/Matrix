@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { getSession } from "next-auth/react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,6 +22,24 @@ export default function LoginPage() {
     if (res?.error) {
       setError(res.error);
     } else {
+      // Wait for session to update, then redirect based on role
+      let tries = 0;
+      while (tries < 10) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise(r => setTimeout(r, 200));
+        const sess = await getSession();
+        const user = sess?.user as typeof sess.user & { role?: string };
+        if (user && user.role) {
+          if (user.role === "admin") {
+            router.replace("/admin/dashboard");
+          } else {
+            router.replace("/dashboard");
+          }
+          return;
+        }
+        tries++;
+      }
+      // fallback
       router.replace("/dashboard");
     }
   };
