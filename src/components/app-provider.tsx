@@ -7,6 +7,14 @@ import type { Agency, UrlItem, AppUser, Task, UserRole, TaskStatus, TaskComment,
 import * as db from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { hash } from 'bcryptjs';
+import { useSession } from "next-auth/react";
+
+interface SessionUser {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
 
 interface AppContextType {
   actualUser: AppUser | null;
@@ -43,6 +51,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { data: session, status } = useSession();
 
   // Load initial data
   useEffect(() => {
@@ -73,6 +82,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     loadData();
   }, []);
+
+  // Sync session with user state
+  useEffect(() => {
+    if (status === "authenticated" && session?.user?.email && users.length > 0) {
+      const user = users.find(u => u.email === session.user?.email);
+      if (user) {
+        console.log('Setting user role:', user.role);
+        setActualUser(user);
+        setCurrentUser(user);
+        setCurrentRole(user.role);
+      }
+    } else if (status === "unauthenticated") {
+      setActualUser(null);
+      setCurrentUser(null);
+      setCurrentRole(null);
+    }
+  }, [status, session, users]);
 
   const addAgency = async (name: string) => {
     try {

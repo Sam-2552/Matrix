@@ -60,20 +60,53 @@ export const addTask = async (task: Task): Promise<void> => {
 };
 
 export const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
+  // Get the current task data first
+  const tasks = await getTasks();
+  const currentTask = tasks.find(t => t.id === taskId);
+  
+  if (!currentTask) {
+    throw new Error('Task not found');
+  }
+
+  // Merge the current task data with updates
+  const updatedTask = {
+    ...currentTask,
+    ...updates,
+    id: taskId // Ensure ID is preserved
+  };
+
   await fetch('/api/db', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'updateTask', data: { id: taskId, ...updates } })
+    body: JSON.stringify({ 
+      action: 'updateTask', 
+      data: updatedTask 
+    })
   });
 };
 
-export const updateUrlStatus = async (urlId: string, status: UrlStatus): Promise<void> => {
-  await fetch('/api/db', {
+export async function updateUrlStatus(urlId: string, status: UrlStatus, pythonCode?: string) {
+  const response = await fetch('/api/db', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'updateUrlStatus', data: { id: urlId, status } })
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'updateUrlStatus',
+      data: {
+        id: urlId,
+        status,
+        pythonCode: pythonCode || ''
+      }
+    }),
   });
-};
+
+  if (!response.ok) {
+    throw new Error('Failed to update URL status');
+  }
+
+  return response.json();
+}
 
 export const addTaskComment = async (taskId: string, comment: TaskComment): Promise<void> => {
   await fetch('/api/db', {

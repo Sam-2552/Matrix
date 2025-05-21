@@ -1,29 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useAppContext } from "@/components/app-provider";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
+  const { currentRole } = useAppContext();
+  const { status } = useSession();
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      if (currentRole === "admin") {
+        router.replace("/admin/dashboard");
+      } else {
+        router.replace("/dashboard");
+      }
+    }
+  }, [status, currentRole, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const res = await signIn("credentials", {
-      redirect: false,
-      email,
-      password,
-    });
-    if (res?.error) {
-      setError(res.error);
-    } else {
-      router.replace("/dashboard");
+    
+    try {
+      const res = await signIn("credentials", {
+        redirect: false,
+        email,
+        password,
+      });
+
+      if (res?.error) {
+        setError(res.error);
+      }
+    } catch (error) {
+      setError("An error occurred during login");
     }
   };
+
+  if (status === "loading") {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-muted">

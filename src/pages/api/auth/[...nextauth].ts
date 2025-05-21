@@ -13,6 +13,27 @@ export default NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) throw new Error("Missing credentials");
+        
+        // Hardcoded admin and user accounts
+        if (credentials.email === "admin@example.com" && credentials.password === "password") {
+          return { 
+            id: "admin-1", 
+            name: "Admin User", 
+            email: "admin@example.com", 
+            role: "admin" 
+          } as User & { role: string };
+        }
+        
+        if (credentials.email === "user@example.com" && credentials.password === "password") {
+          return { 
+            id: "user-1", 
+            name: "Regular User", 
+            email: "user@example.com", 
+            role: "user" 
+          } as User & { role: string };
+        }
+
+        // Regular authentication flow for other users
         const user = await getUserByEmail(credentials.email);
         if (!user) throw new Error("No user found");
         const isValid = await verifyPassword(credentials.password, user.passwordHash);

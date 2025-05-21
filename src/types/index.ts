@@ -1,7 +1,7 @@
 export type UserRole = 'admin' | 'user';
 
 export type TaskStatus = 'pending' | 'in-progress' | 'completed';
-export type UrlStatus = 'pending' | 'in-progress' | 'completed';
+export type UrlStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 
 export interface AppUser {
   id: string;
@@ -17,8 +17,9 @@ export interface Agency {
 export interface UrlItem {
   id: string;
   link: string;
-  agencyId: string | null;
+  agencyId?: string;
   status: UrlStatus;
+  pythonCode?: string;
 }
 
 export interface TaskComment {
@@ -41,9 +42,10 @@ export interface Task {
   title: string;
   description?: string;
   userId: string;
-  assignedItemType: 'agency' | 'urls';
+  assignedItemType: 'urls' | 'agency';
   assignedAgencyId?: string;
+  assignedUrlIds?: string[];
   status: TaskStatus;
-  comments: TaskComment[];
+  comments?: TaskComment[];
   urlProgressDetails?: UrlProgressDetail[];
 }

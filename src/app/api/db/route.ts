@@ -54,9 +54,15 @@ const initializeDatabase = () => {
       link TEXT NOT NULL,
       agencyId TEXT,
       status TEXT NOT NULL,
+      pythonCode TEXT,
       FOREIGN KEY (agencyId) REFERENCES agencies(id)
     )
   `);
+
+  // Migration: add pythonCode column if missing
+  if (!columnExists('urls', 'pythonCode')) {
+    db.exec('ALTER TABLE urls ADD COLUMN pythonCode TEXT');
+  }
 
   // Tasks table
   db.exec(`
@@ -154,7 +160,7 @@ export async function POST(request: Request) {
   try {
     switch (action) {
       case 'addUser':
-        const role = data.role === 'admin' ? 'admin' : 'users';
+        const role = data.role === 'admin' ? 'admin' : 'user';
         db.prepare('INSERT INTO users (id, name, email, passwordHash, role) VALUES (?, ?, ?, ?, ?)')
           .run(data.id, data.name, data.email, data.passwordHash, role);
         return NextResponse.json({ success: true });
@@ -163,8 +169,8 @@ export async function POST(request: Request) {
           .run(data.id, data.name);
         return NextResponse.json({ success: true });
       case 'addUrl':
-        db.prepare('INSERT INTO urls (id, link, agencyId, status) VALUES (?, ?, ?, ?)')
-          .run(data.id, data.link, data.agencyId, data.status);
+        db.prepare('INSERT INTO urls (id, link, agencyId, status, pythonCode) VALUES (?, ?, ?, ?, ?)')
+          .run(data.id, data.link, data.agencyId, data.status, data.pythonCode || '');
         return NextResponse.json({ success: true });
       case 'addTask':
         const insertTask = db.prepare(`
@@ -200,6 +206,7 @@ export async function POST(request: Request) {
         }
         return NextResponse.json({ success: true });
       case 'updateTask':
+        // Update the main task
         db.prepare(`
           UPDATE tasks 
           SET title = ?, description = ?, userId = ?, assignedItemType = ?, 
@@ -214,10 +221,47 @@ export async function POST(request: Request) {
           data.status,
           data.id
         );
+
+        // Update comments if provided
+        if (data.comments) {
+          // First, delete existing comments
+          db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(data.id);
+          
+          // Then insert new comments
+          const insertComment = db.prepare(`
+            INSERT INTO task_comments (id, taskId, text, timestamp)
+            VALUES (?, ?, ?, ?)
+          `);
+          data.comments.forEach((comment: TaskComment) => {
+            insertComment.run(comment.id, data.id, comment.text, comment.timestamp);
+          });
+        }
+
+        // Update URL progress details if provided
+        if (data.urlProgressDetails) {
+          // First, delete existing progress details
+          db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
+          
+          // Then insert new progress details
+          const insertProgress = db.prepare(`
+            INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          data.urlProgressDetails.forEach((progress: UrlProgressDetail) => {
+            insertProgress.run(
+              progress.id,
+              data.id,
+              progress.urlId,
+              progress.status,
+              progress.progressPercentage
+            );
+          });
+        }
+
         return NextResponse.json({ success: true });
       case 'updateUrlStatus':
-        db.prepare('UPDATE urls SET status = ? WHERE id = ?')
-          .run(data.status, data.id);
+        db.prepare('UPDATE urls SET status = ?, pythonCode = ? WHERE id = ?')
+          .run(data.status, data.pythonCode || '', data.id);
         return NextResponse.json({ success: true });
       case 'addTaskComment':
         db.prepare(`
@@ -255,4 +299,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
-} 
+}

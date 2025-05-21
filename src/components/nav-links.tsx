@@ -31,20 +31,17 @@ const navItems: NavItem[] = [
   // User specific links (shown when currentRole is 'user')
   { href: '/dashboard', label: 'My Dashboard', icon: LayoutDashboard, roles: ['user'] },
   { href: '/agencies', label: 'View Agencies', icon: Tags, roles: ['user'] },
-  { href: '/urls', label: 'View My URLs', icon: Link2, roles: ['user'] },
+  { href: '/urls', label: 'Assigned URLs', icon: Link2, roles: ['user'] },
   { href: '/tasks', label: 'My Tasks', icon: FileText, roles: ['user'] },
-  
-  // Common links (shown for both, if any, or handled by role filtering)
-  // Example: A settings page accessible by both, if roles included ['admin', 'user']
-  { href: '/download', label: 'Download Content', icon: Download, roles: ['user', 'admin'] }, // Made accessible to admin too for example
+  { href: '/download', label: 'Downloads', icon: Download, roles: ['user'] },
 ];
 
 export function NavLinks() {
-  const pathname = usePathname();
-  const { currentRole } = useAppContext(); // currentRole reflects the role of currentUser (actual or impersonated)
-
-  if (!currentRole) {
-    return null; // Or some placeholder if needed when no user is logged in (though sidebar might be hidden)
+  const pathname = usePathname() || '';
+  const { currentRole, currentUser } = useAppContext();
+  console.log('NavLinks currentRole:', currentRole);
+  if (!currentRole || !currentUser) {
+    return null;
   }
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(currentRole));
@@ -53,12 +50,14 @@ export function NavLinks() {
     <SidebarMenu>
       {filteredNavItems.map((item) => {
         const Icon = item.icon;
+        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+        
         return (
           <SidebarMenuItem key={item.href}>
             <Link href={item.href} legacyBehavior passHref>
               <SidebarMenuButton
                 asChild
-                isActive={pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))}
+                isActive={isActive}
                 tooltip={{ children: item.label, side: "right", align: "center"}}
               >
                 <a>

@@ -6,15 +6,20 @@ import { useAppContext } from '@/components/app-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { List, PlusCircle, Briefcase } from 'lucide-react';
+import { List, PlusCircle, Briefcase, MessageSquare } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useSession } from "next-auth/react";
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { format } from 'date-fns';
 
 export default function ManageAgenciesPage() {
-  const { agencies, addAgency, getUrlsForAgency } = useAppContext();
+  const { agencies, addAgency, getUrlsForAgency, tasks, addTaskComment } = useAppContext();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [newAgencyName, setNewAgencyName] = useState('');
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [replyText, setReplyText] = useState('');
 
   if (status === "loading") return <div>Loading...</div>;
   if (status === "unauthenticated") {
@@ -27,6 +32,18 @@ export default function ManageAgenciesPage() {
       addAgency(newAgencyName.trim());
       setNewAgencyName('');
     }
+  };
+
+  const handleReply = async () => {
+    if (selectedTask && replyText.trim()) {
+      await addTaskComment(selectedTask.id, replyText);
+      setReplyText('');
+      setSelectedTask(null);
+    }
+  };
+
+  const getTasksForAgency = (agencyId: string) => {
+    return tasks.filter(task => task.assignedAgencyId === agencyId);
   };
 
   return (
@@ -56,17 +73,71 @@ export default function ManageAgenciesPage() {
                   <CardTitle className="text-xl flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>{agency.name}</CardTitle>
                   <CardDescription>ID: {agency.id}</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <h4 className="font-semibold mb-1">Associated URLs:</h4>
-                  {getUrlsForAgency(agency.id).length > 0 ? (
-                    <ul className="list-disc list-inside text-sm text-muted-foreground max-h-32 overflow-y-auto">
-                      {getUrlsForAgency(agency.id).map(url => (
-                        <li key={url.id} className="truncate">{url.link}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No URLs associated.</p>
-                  )}
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-1">Associated URLs:</h4>
+                    {getUrlsForAgency(agency.id).length > 0 ? (
+                      <ul className="list-disc list-inside text-sm text-muted-foreground max-h-32 overflow-y-auto">
+                        {getUrlsForAgency(agency.id).map(url => (
+                          <li key={url.id} className="truncate">{url.link}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No URLs associated.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold mb-1">Task Comments:</h4>
+                    {getTasksForAgency(agency.id).length > 0 ? (
+                      <div className="space-y-2">
+                        {getTasksForAgency(agency.id).map(task => (
+                          <Dialog key={task.id}>
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-start"
+                                onClick={() => setSelectedTask(task)}
+                              >
+                                <MessageSquare className="mr-2 h-4 w-4" />
+                                {task.title} - {task.comments.length} comments
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Task Comments</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="space-y-2">
+                                  {task.comments.map((comment: any) => (
+                                    <div key={comment.id} className={`p-2 rounded ${comment.isAdminReply ? 'bg-primary/10' : 'bg-muted'}`}>
+                                      <p className="text-sm">{comment.text}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        {format(comment.timestamp, 'PPpp')}
+                                        {comment.isAdminReply ? ' (Admin)' : ' (User)'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="space-y-2">
+                                  <Textarea
+                                    placeholder="Type your reply..."
+                                    value={replyText}
+                                    onChange={(e) => setReplyText(e.target.value)}
+                                  />
+                                  <Button onClick={handleReply} disabled={!replyText.trim()}>
+                                    Send Reply
+                                  </Button>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No tasks with comments.</p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
