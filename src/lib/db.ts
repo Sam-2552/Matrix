@@ -130,4 +130,36 @@ export const updateUrlProgress = async (
       data: { taskId, urlId, status, progressPercentage }
     })
   });
+};
+
+export const deleteAgency = async (agencyId: string): Promise<void> => {
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'deleteAgency', data: { id: agencyId } })
+  });
+};
+
+export const deleteUrl = async (urlId: string): Promise<void> => {
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'deleteUrl', data: { id: urlId } })
+  });
+};
+
+export const deleteUser = async (userId: string): Promise<void> => {
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'deleteUser', data: { id: userId } })
+  });
+};
+
+export const deleteTask = async (taskId: string): Promise<void> => {
+  await fetch('/api/db', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'deleteTask', data: { id: taskId } })
+  });
 }; 

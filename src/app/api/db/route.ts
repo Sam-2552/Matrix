@@ -270,33 +270,52 @@ export async function POST(request: Request) {
         `).run(data.id, data.taskId, data.text, data.timestamp);
         return NextResponse.json({ success: true });
       case 'updateUrlProgress':
-        const progress = db.prepare(`
-          SELECT * FROM url_progress_details 
-          WHERE taskId = ? AND urlId = ?
-        `).get(data.taskId, data.urlId) as UrlProgressDetail;
-        if (progress) {
-          db.prepare(`
-            UPDATE url_progress_details 
-            SET status = ?, progressPercentage = ?
-            WHERE taskId = ? AND urlId = ?
-          `).run(data.status, data.progressPercentage, data.taskId, data.urlId);
-        } else {
-          db.prepare(`
-            INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
-            VALUES (?, ?, ?, ?, ?)
-          `).run(
-            data.id,
-            data.taskId,
-            data.urlId,
-            data.status,
-            data.progressPercentage
-          );
-        }
+        db.prepare(`
+          INSERT OR REPLACE INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          data.id || crypto.randomUUID(),
+          data.taskId,
+          data.urlId,
+          data.status,
+          data.progressPercentage
+        );
+        return NextResponse.json({ success: true });
+      case 'deleteAgency':
+        // First delete associated URLs
+        db.prepare('DELETE FROM urls WHERE agencyId = ?').run(data.id);
+        // Then delete the agency
+        db.prepare('DELETE FROM agencies WHERE id = ?').run(data.id);
+        return NextResponse.json({ success: true });
+      case 'deleteUrl':
+        // Delete URL progress details first
+        db.prepare('DELETE FROM url_progress_details WHERE urlId = ?').run(data.id);
+        // Then delete the URL
+        db.prepare('DELETE FROM urls WHERE id = ?').run(data.id);
+        return NextResponse.json({ success: true });
+      case 'deleteUser':
+        // Delete user's tasks and associated data first
+        const userTasks = db.prepare('SELECT id FROM tasks WHERE userId = ?').all(data.id) as { id: string }[];
+        userTasks.forEach((task) => {
+          db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(task.id);
+          db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(task.id);
+        });
+        db.prepare('DELETE FROM tasks WHERE userId = ?').run(data.id);
+        // Then delete the user
+        db.prepare('DELETE FROM users WHERE id = ?').run(data.id);
+        return NextResponse.json({ success: true });
+      case 'deleteTask':
+        // Delete task comments and progress details first
+        db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(data.id);
+        db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
+        // Then delete the task
+        db.prepare('DELETE FROM tasks WHERE id = ?').run(data.id);
         return NextResponse.json({ success: true });
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
+    console.error('Database error:', error);
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 }

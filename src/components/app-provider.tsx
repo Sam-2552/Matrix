@@ -22,12 +22,16 @@ interface AppContextType {
   currentRole: UserRole | null;
   agencies: Agency[];
   addAgency: (name: string) => Promise<void>;
+  deleteAgency: (agencyId: string) => Promise<void>;
   urls: UrlItem[];
   addUrl: (link: string, agencyId: string | null) => Promise<void>;
+  deleteUrl: (urlId: string) => Promise<void>;
   users: AppUser[];
   addUser: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
   tasks: Task[];
   assignTask: (taskData: Omit<Task, 'id' | 'status' | 'comments' | 'urlProgressDetails'>) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
   updateUrlProgress: (taskId: string, urlId: string, newStatus: UrlStatus, newProgressPercentage?: number) => Promise<void>;
   addTaskComment: (taskId: string, commentText: string) => Promise<void>;
@@ -288,18 +292,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAgency = async (agencyId: string) => {
+    try {
+      await db.deleteAgency(agencyId);
+      setAgencies(prev => prev.filter(agency => agency.id !== agencyId));
+      // Also remove associated URLs from state
+      setUrls(prev => prev.filter(url => url.agencyId !== agencyId));
+      toast({ title: 'Agency deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting agency:', error);
+      toast({
+        title: 'Error deleting agency',
+        description: 'Failed to delete agency',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const deleteUrl = async (urlId: string) => {
+    try {
+      await db.deleteUrl(urlId);
+      setUrls(prev => prev.filter(url => url.id !== urlId));
+      toast({ title: 'URL deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting URL:', error);
+      toast({
+        title: 'Error deleting URL',
+        description: 'Failed to delete URL',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    try {
+      await db.deleteUser(userId);
+      setUsers(prev => prev.filter(user => user.id !== userId));
+      // Also remove associated tasks from state
+      setTasks(prev => prev.filter(task => task.userId !== userId));
+      toast({ title: 'User deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast({
+        title: 'Error deleting user',
+        description: 'Failed to delete user',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    try {
+      await db.deleteTask(taskId);
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+      toast({ title: 'Task deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: 'Error deleting task',
+        description: 'Failed to delete task',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const value = {
     actualUser,
     currentUser,
     currentRole,
     agencies,
     addAgency,
+    deleteAgency,
     urls,
     addUrl,
+    deleteUrl,
     users,
     addUser,
+    deleteUser,
     tasks,
     assignTask,
+    deleteTask,
     updateTaskStatus,
     updateUrlProgress,
     addTaskComment,

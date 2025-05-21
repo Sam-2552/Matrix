@@ -7,12 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserPlus, Users2, UserCog, User } from 'lucide-react';
+import { UserPlus, Users2, UserCog, User, Trash2 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function ManageUsersPage() {
-  const { users, addUser, currentUser } = useAppContext();
+  const { users, addUser, currentUser, deleteUser } = useAppContext();
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
@@ -38,6 +38,16 @@ export default function ManageUsersPage() {
       setNewUserEmail('');
       setNewUserPassword('');
       setNewUserRole('user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (userId === currentUser?.id) {
+      alert('You cannot delete your own account.');
+      return;
+    }
+    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+      await deleteUser(userId);
     }
   };
 
@@ -106,11 +116,24 @@ export default function ManageUsersPage() {
             {users.map(user => (
               <Card key={user.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center">
-                    {user.role === 'admin' ? <UserCog className="mr-2 h-5 w-5 text-primary"/> : <User className="mr-2 h-5 w-5 text-primary"/>}
-                    {user.name}
-                  </CardTitle>
-                  <CardDescription>ID: {user.id} - Role: <span className="capitalize font-medium text-foreground">{user.role}</span></CardDescription>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-xl flex items-center">
+                        {user.role === 'admin' ? <UserCog className="mr-2 h-5 w-5 text-primary"/> : <User className="mr-2 h-5 w-5 text-primary"/>}
+                        {user.name}
+                      </CardTitle>
+                      <CardDescription>ID: {user.id} - Role: <span className="capitalize font-medium text-foreground">{user.role}</span></CardDescription>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => handleDeleteUser(user.id)}
+                      className="h-8 w-8 flex-shrink-0"
+                      disabled={user.id === currentUser?.id}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {/* Additional user details or actions can be added here */}

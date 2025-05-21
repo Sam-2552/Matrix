@@ -6,7 +6,7 @@ import { useAppContext } from '@/components/app-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { List, PlusCircle, Briefcase, MessageSquare } from 'lucide-react';
+import { List, PlusCircle, Briefcase, MessageSquare, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useSession } from "next-auth/react";
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { format } from 'date-fns';
 
 export default function ManageAgenciesPage() {
-  const { agencies, addAgency, getUrlsForAgency, tasks, addTaskComment } = useAppContext();
+  const { agencies, addAgency, getUrlsForAgency, tasks, addTaskComment, deleteAgency } = useAppContext();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [newAgencyName, setNewAgencyName] = useState('');
@@ -46,6 +46,12 @@ export default function ManageAgenciesPage() {
     return tasks.filter(task => task.assignedAgencyId === agencyId);
   };
 
+  const handleDeleteAgency = async (agencyId: string) => {
+    if (window.confirm('Are you sure you want to delete this agency? This action cannot be undone.')) {
+      await deleteAgency(agencyId);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -70,7 +76,17 @@ export default function ManageAgenciesPage() {
             {agencies.map(agency => (
               <Card key={agency.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
                 <CardHeader>
-                  <CardTitle className="text-xl flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>{agency.name}</CardTitle>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-xl flex items-center"><Briefcase className="mr-2 h-5 w-5 text-primary"/>{agency.name}</CardTitle>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      onClick={() => handleDeleteAgency(agency.id)}
+                      className="h-8 w-8"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <CardDescription>ID: {agency.id}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

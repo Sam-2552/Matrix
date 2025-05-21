@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GanttChartSquare, CheckCircle, User, Briefcase, Link2, ChevronDown, ChevronUp } from 'lucide-react';
+import { GanttChartSquare, CheckCircle, User, Briefcase, Link2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import type { AppUser, Agency, UrlItem } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import { useSession } from "next-auth/react";
 
 export default function AssignTaskPage() {
-  const { users, agencies, urls, assignTask, tasks: allTasks } = useAppContext();
+  const { users, agencies, urls, assignTask, tasks: allTasks, deleteTask } = useAppContext();
   const { data: session, status } = useSession();
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
@@ -70,6 +70,12 @@ export default function AssignTaskPage() {
     setSelectedUrlIds(prev => 
       prev.includes(urlId) ? prev.filter(id => id !== urlId) : [...prev, urlId]
     );
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+      await deleteTask(taskId);
+    }
   };
 
   const assignedTasks = allTasks; // Display all tasks for admin overview
@@ -195,10 +201,22 @@ export default function AssignTaskPage() {
                   return (
                     <Card key={task.id} className="shadow-sm">
                       <CardHeader>
-                        <CardTitle className="text-lg">{task.title}</CardTitle>
-                        <CardDescription>
-                          Assigned to: <span className="font-medium text-foreground">{user?.name || 'N/A'}</span> | Status: <span className={`capitalize font-medium ${task.status === 'completed' ? 'text-green-600' : task.status === 'in-progress' ? 'text-blue-600' : 'text-orange-600'}`}>{task.status}</span>
-                        </CardDescription>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <CardTitle className="text-lg">{task.title}</CardTitle>
+                            <CardDescription>
+                              Assigned to: <span className="font-medium text-foreground">{user?.name || 'N/A'}</span> | Status: <span className={`capitalize font-medium ${task.status === 'completed' ? 'text-green-600' : task.status === 'in-progress' ? 'text-blue-600' : 'text-orange-600'}`}>{task.status}</span>
+                            </CardDescription>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="h-8 w-8 flex-shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </CardHeader>
                       <CardContent>
                         {task.description && <p className="text-sm text-muted-foreground mb-2">{task.description}</p>}

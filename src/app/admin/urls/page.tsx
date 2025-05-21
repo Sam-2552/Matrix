@@ -7,13 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { List, PlusCircle, Link2 } from 'lucide-react';
+import { List, PlusCircle, Link2, Trash2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const NO_AGENCY_ITEM_VALUE = "__NO_AGENCY_SELECTED__"; // Ensure this is not an empty string
 
 export default function ManageUrlsPage() {
-  const { urls, addUrl, agencies, currentUser } = useAppContext();
+  const { urls, addUrl, agencies, currentUser, deleteUrl } = useAppContext();
   const [newUrlLink, setNewUrlLink] = useState('');
   const [selectedAgencyId, setSelectedAgencyId] = useState<string | null>(null);
   const router = useRouter();
@@ -39,6 +39,12 @@ export default function ManageUrlsPage() {
       addUrl(newUrlLink.trim(), selectedAgencyId);
       setNewUrlLink('');
       setSelectedAgencyId(null); 
+    }
+  };
+
+  const handleDeleteUrl = async (urlId: string) => {
+    if (window.confirm('Are you sure you want to delete this URL? This action cannot be undone.')) {
+      await deleteUrl(urlId);
     }
   };
 
@@ -100,10 +106,20 @@ export default function ManageUrlsPage() {
               return (
                 <Card key={url.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
                   <CardHeader>
-                    <CardTitle className="text-lg truncate flex items-center">
-                      <Link2 className="mr-2 h-5 w-5 text-primary flex-shrink-0"/>
-                      <a href={url.link} target="_blank" rel="noopener noreferrer" className="hover:underline">{url.link}</a>
-                    </CardTitle>
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-lg truncate flex items-center">
+                        <Link2 className="mr-2 h-5 w-5 text-primary flex-shrink-0"/>
+                        <a href={url.link} target="_blank" rel="noopener noreferrer" className="hover:underline">{url.link}</a>
+                      </CardTitle>
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => handleDeleteUrl(url.id)}
+                        className="h-8 w-8 flex-shrink-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <CardDescription>ID: {url.id}</CardDescription>
                   </CardHeader>
                   <CardContent>
