@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :root {
+    --background: 250 100% 97%; /* Light Lavender */
+    --foreground: 265 55% 30%; /* Dark Indigo/Purple */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 265 55% 30%; /* Dark Indigo/Purple */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 265 55% 30%; /* Dark Indigo/Purple */
+
+    --primary: 265 65% 55%; /* Vibrant Indigo/Purple */
+    --primary-foreground: 0 0% 100%; /* White */
+
+    --secondary: 250 80% 92%; /* Lighter Lavender */
+    --secondary-foreground: 265 50% 40%; /* Slightly muted Indigo/Purple */
+
+    --muted: 250 60% 94%; /* Very Pale Lavender */
+    --muted-foreground: 260 35% 60%; /* Muted Grayish Purple */
+
+    --accent: 25 95% 53%; /* Orange */
+    --accent-foreground: 0 0% 100%; /* White */
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 250 50% 88%; /* Light Lavender Border */
+    --input: 250 75% 96%; /* Very Light Lavender Input Background */
+    --ring: 265 70% 65%; /* Brighter Indigo/Purple for Ring */
+
+    --radius: 0.5rem;
+
+    /* Chart colors */
+    --chart-1: 265 65% 55%; /* Primary Indigo/Purple */
+    --chart-2: 250 70% 65%; /* Softer Lavender */
+    --chart-3: 280 60% 60%; /* Magenta/Purple */
+    --chart-4: 240 60% 70%; /* Blue/Lavender */
+    --chart-5: 25 95% 53%; /* Orange Accent */
+
+    /* Sidebar specific theme variables */
+    --sidebar-background: 250 100% 97%; /* Light Lavender */
+    --sidebar-foreground: 265 55% 30%; /* Dark Indigo/Purple */
+    --sidebar-primary: 265 65% 55%; /* Vibrant Indigo/Purple */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 250 80% 92%; /* Lighter Lavender for hover */
+    --sidebar-accent-foreground: 265 50% 40%; /* Slightly muted Indigo/Purple on hover */
+    --sidebar-border: 250 50% 88%; /* Light Lavender Border for sidebar elements */
+    --sidebar-ring: 265 70% 65%; /* Brighter Indigo/Purple for focus rings */
+  }
+
+  .dark {
+    --background: 260 40% 12%; /* Darkest Purple/Indigo */
+    --foreground: 250 80% 95%; /* Pale Lavender/White text */
+
+    --card: 260 35% 17%; /* Dark Purple/Indigo Card */
+    --card-foreground: 250 80% 95%;
+
+    --popover: 260 35% 17%; /* Dark Purple/Indigo Popover */
+    --popover-foreground: 250 80% 95%;
+
+    --primary: 265 70% 65%; /* Brighter Indigo/Purple for dark mode */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
+
+    --secondary: 260 30% 22%; /* Darker Lavender/Indigo */
+    --secondary-foreground: 250 70% 88%; /* Lighter Lavender text */
+
+    --muted: 260 25% 25%; /* Very Dark, Muted Purple/Indigo */
+    --muted-foreground: 250 50% 75%; /* Muted Light Lavender text */
+
+    --accent: 25 90% 60%; /* Brighter Orange for dark mode */
+    --accent-foreground: 0 0% 100%; /* White text on orange */
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 260 20% 35%; /* Dark Lavender/Indigo Border */
+    --input: 260 25% 28%; /* Dark Lavender/Indigo Input */
+    --ring: 265 75% 75%; /* Even Brighter Indigo/Purple Ring */
+
+    /* Chart colors for dark mode */
+    --chart-1: 265 70% 65%;
+    --chart-2: 250 65% 70%;
+    --chart-3: 280 60% 70%;
+    --chart-4: 240 55% 75%;
+    --chart-5: 25 90% 60%;
+
+    /* Sidebar specific theme variables for dark mode */
+    --sidebar-background: 260 40% 12%; /* Darkest Purple/Indigo */
+    --sidebar-foreground: 250 80% 95%; /* Pale Lavender/White text */
+    --sidebar-primary: 265 70% 65%; /* Brighter Indigo/Purple */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 260 30% 22%; /* Darker Lavender/Indigo for hover */
+    --sidebar-accent-foreground: 250 70% 88%; /* Lighter Lavender text on hover */
+    --sidebar-border: 260 20% 30%; /* Darker border */
+    --sidebar-ring: 265 75% 75%; /* Even Brighter Indigo/Purple ring */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
