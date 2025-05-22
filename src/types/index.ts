@@ -21,6 +21,7 @@ export interface UrlItem {
   status: UrlStatus;
   pythonCode?: string;
   executionOutput?: string;
+  isExecuting?: boolean;
 }
 
 export interface TaskComment {

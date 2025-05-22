@@ -43,9 +43,15 @@ const initializeDatabase = () => {
   db.exec(`
     CREATE TABLE IF NOT EXISTS agencies (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      comments TEXT
     )
   `);
+
+  // Migration: add comments column if missing
+  if (!columnExists('agencies', 'comments')) {
+    db.exec('ALTER TABLE agencies ADD COLUMN comments TEXT');
+  }
 
   // URLs table
   db.exec(`
@@ -150,6 +156,13 @@ export async function GET(request: Request) {
           };
         });
         return NextResponse.json(tasksWithDetails);
+      case 'getAgencyComments':
+        const agencyId = searchParams.get('agencyId');
+        if (!agencyId) {
+          return NextResponse.json({ error: 'Missing agency ID' }, { status: 400 });
+        }
+        const agencyComments = db.prepare('SELECT comments FROM agencies WHERE id = ?').get(agencyId);
+        return NextResponse.json({ comments: agencyComments?.comments || '' });
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -314,6 +327,17 @@ export async function POST(request: Request) {
         db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
         // Then delete the task
         db.prepare('DELETE FROM tasks WHERE id = ?').run(data.id);
+        return NextResponse.json({ success: true });
+      case 'updateUrlExecutionOutput':
+        const { id, executionOutput, status } = data;
+        db.prepare('UPDATE urls SET executionOutput = ?, status = ? WHERE id = ?')
+          .run(executionOutput, status, id);
+        return NextResponse.json({ success: true });
+      case 'updateAgencyComments':
+        if (!data.agencyId || !data.comments) {
+          return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+        db.prepare('UPDATE agencies SET comments = ? WHERE id = ?').run(data.comments, data.agencyId);
         return NextResponse.json({ success: true });
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

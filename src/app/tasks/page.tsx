@@ -14,17 +14,25 @@ import { FileText, MessageSquare, Send, Link2, Tags, CheckCircle, RefreshCw, Cir
 import type { TaskStatus, TaskComment, UrlItem, Task, UrlStatus, UrlProgressDetail } from '@/types';
 import { format } from 'date-fns';
 import { useSession } from "next-auth/react";
+import { CommentEditor } from '@/components/comment-editor';
+import DOMPurify from 'dompurify';
+import { useToast } from "@/hooks/use-toast";
 
 export default function MyTasksPage() {
   const { getTasksForUser, updateTaskStatus, addTaskComment, agencies, urls: allUrls, updateUrlProgress } = useAppContext();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
+  const { toast } = useToast();
 
   if (status === "loading") return <div>Loading...</div>;
   if (status === "unauthenticated") {
     router.replace("/login");
     return null;
+  }
+
+  if (!session?.user?.id) {
+    return <div>User not found</div>;
   }
 
   const userTasks = getTasksForUser(session.user.id);
@@ -42,12 +50,9 @@ export default function MyTasksPage() {
   };
 
   const handleUrlProgressChange = (taskId: string, urlId: string, progress: number) => {
-    // Status is 'in-progress' if actively changing progress, unless progress is 100 (then 'completed')
-    // or 0 (could be 'pending' or 'in-progress' depending on explicit status choice)
-    // The updateUrlProgress function handles this logic.
     const task = userTasks.find(t => t.id === taskId);
     const urlDetail = task?.urlProgressDetails?.find(upd => upd.urlId === urlId);
-    const currentStatus = urlDetail?.status || 'in-progress'; // Default to in-progress if changing slider
+    const currentStatus = urlDetail?.status || 'in_progress'; // Fixed status value
 
     updateUrlProgress(taskId, urlId, progress === 100 ? 'completed' : currentStatus, progress);
   };
@@ -143,7 +148,7 @@ export default function MyTasksPage() {
                                             value={urlDetail.status} 
                                             onValueChange={(newStatus) => handleUrlStatusChange(task.id, urlDetail.urlId, newStatus as UrlStatus)}
                                           >
-                                            <SelectTrigger className={`h-8 text-xs w-36 ${urlDetail.status === 'completed' ? 'border-green-500 text-green-600' : urlDetail.status === 'in-progress' ? 'border-blue-500 text-blue-600' : 'border-orange-500 text-orange-600'}`}>
+                                            <SelectTrigger className={`h-8 text-xs w-36 ${urlDetail.status === 'completed' ? 'border-green-500 text-green-600' : urlDetail.status === 'in_progress' ? 'border-blue-500 text-blue-600' : 'border-orange-500 text-orange-600'}`}>
                                               <SelectValue placeholder="URL Status"/>
                                             </SelectTrigger>
                                             <SelectContent>
@@ -152,7 +157,7 @@ export default function MyTasksPage() {
                                               <SelectItem value="completed"><CheckCircle className="mr-1 h-3 w-3 text-green-500"/>Completed</SelectItem>
                                             </SelectContent>
                                           </Select>
-                                          {urlDetail.status === 'in-progress' && (
+                                          {urlDetail.status === 'in_progress' && (
                                             <div className="flex items-center space-x-2 flex-grow">
                                               <Slider
                                                 value={[urlDetail.progressPercentage ?? 0]}
@@ -189,16 +194,24 @@ export default function MyTasksPage() {
                     <Accordion type="single" collapsible className="w-full">
                       <AccordionItem value="comments">
                         <AccordionTrigger className="text-sm hover:no-underline">
-                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments.length})</span>
+                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments?.length || 0})</span>
                         </AccordionTrigger>
                         <AccordionContent className="pt-2">
                           <ScrollArea className="h-40 mb-2 border rounded-md p-2">
-                            {task.comments.length > 0 ? (
+                            {task.comments?.length > 0 ? (
                               <ul className="space-y-3">
                                 {task.comments.map((comment: TaskComment) => (
                                   <li key={comment.id} className="text-xs">
                                     <p className="font-semibold text-foreground"><span className="text-muted-foreground font-normal">({format(new Date(comment.timestamp ?? 0), "PPpp")})</span>:</p>
-                                    <p className="text-muted-foreground whitespace-pre-wrap">{comment.text}</p>
+                                    <div 
+                                      className="text-muted-foreground prose prose-sm max-w-none prose-headings:my-2 prose-p:my-1 prose-a:text-primary prose-a:underline hover:prose-a:no-underline"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: DOMPurify.sanitize(comment.text, {
+                                          ALLOWED_TAGS: ['a', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'code', 'pre', 'prompt', 'img'],
+                                            ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class', 'style', 'onerror']
+                                          })
+                                      }}
+                                    />
                                   </li>
                                 ))}
                               </ul>
@@ -208,10 +221,10 @@ export default function MyTasksPage() {
                           </ScrollArea>
                           <div className="flex space-x-2">
                             <Textarea 
-                              placeholder="Add a comment..." 
+                              placeholder="Add a comment" 
                               value={commentTexts[task.id] || ''}
                               onChange={(e) => setCommentTexts(prev => ({ ...prev, [task.id]: e.target.value }))}
-                              className="text-xs min-h-[40px]"
+                              className="text-xs min-h-[40px] font-mono"
                               rows={2}
                             />
                             <Button size="sm" onClick={() => handleAddComment(task.id)} disabled={!commentTexts[task.id]?.trim()}>

@@ -162,4 +162,32 @@ export const deleteTask = async (taskId: string): Promise<void> => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'deleteTask', data: { id: taskId } })
   });
-}; 
+};
+
+export async function updateUrlExecutionOutput(urlId: string, executionOutput: string) {
+  // For server-side requests, use absolute URL
+  const isServer = typeof window === 'undefined';
+  const baseUrl = isServer 
+    ? (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002')
+    : '';
+  
+  const response = await fetch(`${baseUrl}/api/db`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'updateUrlExecutionOutput',
+      data: {
+        id: urlId,
+        executionOutput
+      }
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update URL execution output');
+  }
+
+  return response.json();
+} 

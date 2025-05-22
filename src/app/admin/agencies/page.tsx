@@ -12,6 +12,7 @@ import { useSession } from "next-auth/react";
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { format } from 'date-fns';
+import DOMPurify from 'dompurify';
 
 export default function ManageAgenciesPage() {
   const { agencies, addAgency, getUrlsForAgency, tasks, addTaskComment, deleteAgency } = useAppContext();
@@ -127,7 +128,15 @@ export default function ManageAgenciesPage() {
                                 <div className="space-y-2">
                                   {task.comments.map((comment: any) => (
                                     <div key={comment.id} className={`p-2 rounded ${comment.isAdminReply ? 'bg-primary/10' : 'bg-muted'}`}>
-                                      <p className="text-sm">{comment.text}</p>
+                                      <div 
+                                        className="text-sm prose prose-sm max-w-none prose-headings:my-2 prose-p:my-1 prose-a:text-primary prose-a:underline hover:prose-a:no-underline"
+                                        dangerouslySetInnerHTML={{ 
+                                          __html: DOMPurify.sanitize(comment.text, {
+                                            ALLOWED_TAGS: ['a', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'code', 'pre', 'prompt', 'img'],
+                                            ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class', 'style', 'prompt', 'onerror']
+                                          })
+                                        }}
+                                      />
                                       <p className="text-xs text-muted-foreground mt-1">
                                         {format(comment.timestamp, 'PPpp')}
                                         {comment.isAdminReply ? ' (Admin)' : ' (User)'}

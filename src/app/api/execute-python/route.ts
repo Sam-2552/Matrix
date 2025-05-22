@@ -16,35 +16,66 @@ export async function POST(request: Request) {
     // Write the code to the temporary file
     await writeFile(filePath, code);
 
-    // Execute the Python code in the background
-    const pythonProcess = spawn('python', [filePath]);
+    // Execute the Python code and wait for completion
+    const output = await new Promise<string>((resolve, reject) => {
+      const pythonProcess = spawn('python', [filePath]);
+      let output = '';
+      let error = '';
 
-    let output = '';
-    let error = '';
+      // Collect stdout
+      pythonProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
 
-    // Collect stdout
-    pythonProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
+      // Collect stderr
+      pythonProcess.stderr.on('data', (data) => {
+        error += data.toString();
+      });
 
-    // Collect stderr
-    pythonProcess.stderr.on('data', (data) => {
-      error += data.toString();
-    });
+      // Handle process completion
+      pythonProcess.on('close', (code) => {
+        // Clean up the temporary file
+        unlink(filePath).catch((err: Error) => {
+          console.error('Error deleting temporary file:', err);
+        });
 
-    // Handle process completion
-    pythonProcess.on('close', (code) => {
-      // Clean up the temporary file
-      unlink(filePath).catch((err: Error) => {
-        console.error('Error deleting temporary file:', err);
+        if (code === 0) {
+          resolve(output);
+        } else {
+          reject(new Error(error || 'Python process failed'));
+        }
+      });
+
+      // Handle process error
+      pythonProcess.on('error', (err) => {
+        reject(err);
       });
     });
 
-    // Return immediately with a success response
+    // Update the database using the existing API endpoint
+    const response = await fetch('http://localhost:9002/api/db', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'updateUrlExecutionOutput',
+        data: {
+          id: urlId,
+          executionOutput: output,
+          status: 'completed'
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update database');
+    }
+
     return NextResponse.json({ 
       success: true, 
-      message: 'Python code execution started',
-      output: output || error // Include any immediate output
+      message: 'Python code execution completed',
+      output
     });
 
   } catch (error: unknown) {
