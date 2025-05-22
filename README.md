@@ -1,0 +1,71 @@
+# Next.js Authentication Project
+
+This is a Next.js application with built-in authentication using NextAuth.js. The project includes both admin and regular user authentication flows.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+- [Node.js](https://nodejs.org/) (version 14.x or higher)
+- npm (comes with Node.js)
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <your-repository-url>
+cd <your-project-directory>
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+## Development
+
+To run the development server:
+
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:3000`
+
+## Default Login Credentials
+
+The application comes with two default accounts for testing:
+
+### Admin Account
+- Email: admin@example.com
+- Password: admin@password123
+
+### Regular User Account
+- Email: user@example.com
+- Password: password
+
+## Features
+
+- Next.js authentication using NextAuth.js
+- JWT-based session management
+- Role-based access control (Admin and Regular User roles)
+- Custom login page
+- Secure password handling
+
+## Project Structure
+
+- `/src/pages/api/auth` - Authentication API routes
+- `/src/lib/auth` - Authentication utilities
+- `/src/pages` - Next.js pages including the login page
+
+## Security Notes
+
+- The default accounts are for development purposes only
+- In production, make sure to:
+  - Remove hardcoded credentials
+  - Use environment variables for sensitive data
+  - Implement proper password hashing
+  - Set up proper database integration
+
+## License
+
+[Your License Here]
