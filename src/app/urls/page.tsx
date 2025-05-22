@@ -43,12 +43,51 @@ export default function ViewMyUrlsPage() {
       const url = urls.find(u => u.id === urlId);
       if (!url) return;
 
-      await updateUrlStatus(urlId, newStatus);
+      await updateUrlStatus(urlId, newStatus, url.pythonCode);
       setUrls(prev => prev.map(url =>
         url.id === urlId ? { ...url, status: newStatus } : url
       ));
-    } catch (error) {
+
+      if (newStatus === 'completed' && url.pythonCode) {
+        executePythonCode(urlId, url.pythonCode);
+      }
+    } catch (error: unknown) {
       console.error('Error updating URL status:', error);
+    }
+  };
+
+  const executePythonCode = async (urlId: string, code: string) => {
+    try {
+      const response = await fetch('/api/execute-python', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          urlId,
+          code
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to execute Python code');
+      }
+
+      const result = await response.json();
+      
+      await updateUrlStatus(urlId, 'completed', code);
+      setUrls(prev => prev.map(url =>
+        url.id === urlId ? { ...url, executionOutput: result.output } : url
+      ));
+    } catch (error: unknown) {
+      console.error('Error executing Python code:', error);
+      await updateUrlStatus(urlId, 'failed', code);
+      setUrls(prev => prev.map(url =>
+        url.id === urlId ? { 
+          ...url, 
+          executionOutput: error instanceof Error ? error.message : 'Unknown error occurred'
+        } : url
+      ));
     }
   };
 
@@ -143,6 +182,12 @@ export default function ViewMyUrlsPage() {
                         readOnly={url.status === 'completed'}
                       />
                     </div>
+                    {url.executionOutput && (
+                      <div className="mt-4 p-4 bg-muted rounded-md">
+                        <h4 className="text-sm font-semibold mb-2">Execution Output:</h4>
+                        <pre className="text-xs whitespace-pre-wrap">{url.executionOutput}</pre>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

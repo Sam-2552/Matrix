@@ -20,6 +20,7 @@ export interface UrlItem {
   agencyId?: string;
   status: UrlStatus;
   pythonCode?: string;
+  executionOutput?: string;
 }
 
 export interface TaskComment {

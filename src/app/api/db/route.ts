@@ -55,13 +55,17 @@ const initializeDatabase = () => {
       agencyId TEXT,
       status TEXT NOT NULL,
       pythonCode TEXT,
+      executionOutput TEXT,
       FOREIGN KEY (agencyId) REFERENCES agencies(id)
     )
   `);
 
-  // Migration: add pythonCode column if missing
+  // Migration: add pythonCode and executionOutput columns if missing
   if (!columnExists('urls', 'pythonCode')) {
     db.exec('ALTER TABLE urls ADD COLUMN pythonCode TEXT');
+  }
+  if (!columnExists('urls', 'executionOutput')) {
+    db.exec('ALTER TABLE urls ADD COLUMN executionOutput TEXT');
   }
 
   // Tasks table
@@ -260,8 +264,8 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true });
       case 'updateUrlStatus':
-        db.prepare('UPDATE urls SET status = ?, pythonCode = ? WHERE id = ?')
-          .run(data.status, data.pythonCode || '', data.id);
+        db.prepare('UPDATE urls SET status = ?, pythonCode = ?, executionOutput = ? WHERE id = ?')
+          .run(data.status, data.pythonCode || '', data.executionOutput || '', data.id);
         return NextResponse.json({ success: true });
       case 'addTaskComment':
         db.prepare(`
