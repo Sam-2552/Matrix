@@ -84,10 +84,21 @@ const initializeDatabase = () => {
       assignedItemType TEXT NOT NULL,
       assignedAgencyId TEXT,
       status TEXT NOT NULL,
+      reportPath TEXT DEFAULT NULL,
       FOREIGN KEY (userId) REFERENCES users(id),
       FOREIGN KEY (assignedAgencyId) REFERENCES agencies(id)
     )
   `);
+
+  // Force add reportPath column if it doesn't exist
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN reportPath TEXT DEFAULT NULL');
+  } catch (error: any) {
+    // Ignore error if column already exists
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding reportPath column:', error);
+    }
+  }
 
   // Task Comments table
   db.exec(`
@@ -339,6 +350,17 @@ export async function POST(request: Request) {
         }
         db.prepare('UPDATE agencies SET comments = ? WHERE id = ?').run(data.comments, data.agencyId);
         return NextResponse.json({ success: true });
+      case 'updateTaskReport':
+        if (!data?.taskId || !data?.reportPath) {
+          return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+        try {
+          db.prepare('UPDATE tasks SET reportPath = ? WHERE id = ?').run(data.reportPath, data.taskId);
+          return NextResponse.json({ success: true });
+        } catch (error) {
+          console.error('Error updating task report:', error);
+          return NextResponse.json({ error: 'Failed to update task report' }, { status: 500 });
+        }
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

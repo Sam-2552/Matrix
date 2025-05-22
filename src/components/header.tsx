@@ -8,14 +8,27 @@ import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useAppContext } from './app-provider';
 import { useRouter } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 
 export function Header() {
   const { actualUser, logout } = useAppContext();
   const router = useRouter();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Clear app context state
     logout();
-    router.push('/login');
+    
+    // Clear any stored data
+    localStorage.clear();
+
+    // Sign out from next-auth
+    await signOut({ 
+      redirect: false,
+      callbackUrl: '/login'
+    });
+
+    // Force a complete page reload and redirect
+    window.location.replace('/login');
   };
 
   return (

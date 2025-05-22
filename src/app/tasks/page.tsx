@@ -10,19 +10,21 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
-import { FileText, MessageSquare, Send, Link2, Tags, CheckCircle, RefreshCw, Circle, Percent } from 'lucide-react';
+import { FileText, MessageSquare, Send, Link2, Tags, CheckCircle, RefreshCw, Circle, Percent, Upload } from 'lucide-react';
 import type { TaskStatus, TaskComment, UrlItem, Task, UrlStatus, UrlProgressDetail } from '@/types';
 import { format } from 'date-fns';
 import { useSession } from "next-auth/react";
 import { CommentEditor } from '@/components/comment-editor';
 import DOMPurify from 'dompurify';
 import { useToast } from "@/hooks/use-toast";
+import { Input } from '@/components/ui/input';
 
 export default function MyTasksPage() {
   const { getTasksForUser, updateTaskStatus, addTaskComment, agencies, urls: allUrls, updateUrlProgress } = useAppContext();
   const { data: session, status } = useSession();
   const router = useRouter();
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
   const { toast } = useToast();
 
   if (status === "loading") return <div>Loading...</div>;
@@ -41,8 +43,9 @@ export default function MyTasksPage() {
     const task = userTasks.find(t => t.id === taskId);
     if (task && task.assignedItemType === 'agency') {
       updateTaskStatus(taskId, status);
+      // Clear selected file when status changes
+      setSelectedFiles(prev => ({ ...prev, [taskId]: null }));
     }
-    // For URL-type tasks, overall status is derived, so direct change is disabled/ignored.
   };
 
   const handleUrlStatusChange = (taskId: string, urlId: string, newStatus: UrlStatus) => {
@@ -57,6 +60,51 @@ export default function MyTasksPage() {
     updateUrlProgress(taskId, urlId, progress === 100 ? 'completed' : currentStatus, progress);
   };
 
+  const handleFileChange = (taskId: string, file: File | null) => {
+    setSelectedFiles(prev => ({ ...prev, [taskId]: file }));
+  };
+
+  const handleSubmitReport = async (taskId: string) => {
+    const file = selectedFiles[taskId];
+    if (!file) {
+      toast({
+        title: "Error",
+        description: "Please select a file to upload",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('taskId', taskId);
+
+      const response = await fetch('/api/upload-report', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload report');
+      }
+
+      toast({
+        title: "Success",
+        description: "Report submitted successfully",
+      });
+
+      // Clear the selected file after successful upload
+      setSelectedFiles(prev => ({ ...prev, [taskId]: null }));
+    } catch (error) {
+      console.error('Error uploading report:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload report",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleAddComment = (taskId: string) => {
     const text = commentTexts[taskId];
@@ -81,7 +129,6 @@ export default function MyTasksPage() {
     return { type: 'url', name: `${taskUrlDetails.length} URL(s)`, items: taskUrlDetails };
   };
 
-
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight flex items-center"><FileText className="mr-2 h-8 w-8 text-primary"/>My Tasks</h1>
@@ -93,6 +140,7 @@ export default function MyTasksPage() {
             {userTasks.map(task => {
               const taskItemsDetails = getTaskItemsDetails(task);
               const isUrlTask = task.assignedItemType === 'urls';
+              const isCompleted = task.status === 'completed';
 
               return (
                 <Card key={task.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -235,6 +283,32 @@ export default function MyTasksPage() {
                       </AccordionItem>
                     </Accordion>
                   </CardContent>
+                  {isCompleted && task.assignedItemType === 'agency' && (
+                    <CardFooter className="border-t pt-4">
+                      <div className="w-full space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            type="file"
+                            onChange={(e) => handleFileChange(task.id, e.target.files?.[0] || null)}
+                            className="flex-1"
+                          />
+                          <Button 
+                            onClick={() => handleSubmitReport(task.id)}
+                            disabled={!selectedFiles[task.id]}
+                            className="flex items-center"
+                          >
+                            <Upload className="mr-2 h-4 w-4" />
+                            Submit Report
+                          </Button>
+                        </div>
+                        {selectedFiles[task.id] && (
+                          <p className="text-sm text-muted-foreground">
+                            Selected file: {selectedFiles[task.id]?.name}
+                          </p>
+                        )}
+                      </div>
+                    </CardFooter>
+                  )}
                 </Card>
               )
             })}

@@ -1,127 +1,210 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/components/app-provider';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, FileCode, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { FileText, Code, Download, AlertCircle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { getUrls } from '@/lib/db';
-import type { UrlItem } from '@/types';
 
-export default function DownloadCodePage() {
-  const { toast } = useToast();
-  const { currentUser } = useAppContext();
+export default function DownloadPage() {
+  const { getTasksForUser } = useAppContext();
   const router = useRouter();
-  const [randomCode, setRandomCode] = useState<UrlItem | null>(null);
+  const [randomCode, setRandomCode] = useState<string | null>(null);
+  const [randomReport, setRandomReport] = useState<{ taskId: string; fileName: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (!currentUser) {
-      router.replace('/login');
-      return;
-    }
-
-    const fetchRandomCode = async () => {
-      try {
-        const urls = await getUrls();
-        // Filter URLs that have Python code
-        const urlsWithCode = urls.filter(url => url.pythonCode && url.pythonCode.trim() !== '');
-        
-        if (urlsWithCode.length > 0) {
-          // Get a random URL with code
-          const randomIndex = Math.floor(Math.random() * urlsWithCode.length);
-          setRandomCode(urlsWithCode[randomIndex]);
-        }
-      } catch (error) {
-        console.error('Error fetching code:', error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch code samples",
-          variant: "destructive"
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchRandomCode();
-  }, [currentUser, router, toast]);
+    fetchRandomReport();
+  }, []);
 
-  const handleDownload = () => {
-    if (!randomCode?.pythonCode) return;
+  const fetchRandomCode = async () => {
+    try {
+      const response = await fetch('/api/db?action=getUrls');
+      const urls = await response.json();
+      const pythonUrls = urls.filter((url: any) => url.pythonCode);
+      
+      if (pythonUrls.length > 0) {
+        const randomUrl = pythonUrls[Math.floor(Math.random() * pythonUrls.length)];
+        setRandomCode(randomUrl.pythonCode);
+      }
+    } catch (error) {
+      console.error('Error fetching random code:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    const fileName = `Matrix_Code_${randomCode.id}.py`;
-    const fileContent = randomCode.pythonCode;
+  const fetchRandomReport = async () => {
+    try {
+      const response = await fetch('/api/db?action=getTasks');
+      const tasks = await response.json();
+      const tasksWithReports = tasks.filter((task: any) => task.reportPath);
+      
+      if (tasksWithReports.length > 0) {
+        const randomTask = tasksWithReports[Math.floor(Math.random() * tasksWithReports.length)];
+        setRandomReport({
+          taskId: randomTask.id,
+          fileName: randomTask.reportPath
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching random report:', error);
+    }
+  };
+
+  const handleDownloadCode = () => {
+    if (!randomCode) return;
     
-    const blob = new Blob([fileContent], { type: "text/plain;charset=utf-8" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-
+    const blob = new Blob([randomCode], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Matrix_Code.py';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
     toast({
       title: "Download Started",
-      description: `${fileName} is being downloaded.`,
+      description: "Your Python code is being downloaded.",
     });
   };
 
-  if (isLoading || !currentUser) {
-    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
-  }
+  const handleDownloadReport = async () => {
+    if (!randomReport) return;
+    
+    try {
+      const response = await fetch(`/api/download-report?fileName=${randomReport.fileName}`);
+      if (!response.ok) throw new Error('Failed to download report');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = randomReport.fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Download Started",
+        description: "Your report is being downloaded.",
+      });
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to download report. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
-    <div className="space-y-6 flex flex-col items-center justify-center min-h-[calc(100vh-10rem)]">
-      <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="text-center">
-          <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-4">
-            <Download className="h-10 w-10 text-primary" />
-          </div>
-          <CardTitle className="text-2xl">Download Sample Code</CardTitle>
-          <CardDescription>
-            {randomCode ? "Download a random Python code sample from completed audits." : "No code samples available."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center">
-          {randomCode ? (
-            <>
-              <div className="w-full mb-6 p-4 bg-muted rounded-lg">
-                <h3 className="text-sm font-semibold mb-2">Code Preview:</h3>
-                <pre className="text-xs whitespace-pre-wrap bg-background p-2 rounded border max-h-40 overflow-y-auto">
-                  {randomCode.pythonCode}
-                </pre>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold tracking-tight flex items-center"><Download className="mr-2 h-8 w-8 text-primary"/>Downloads</h1>
+      <p className="text-muted-foreground">Download sample Python code and submitted reports.</p>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Python Code Download Box */}
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl">
+              <Code className="mr-2 h-6 w-6 text-primary"/>
+              Sample Python Code
+            </CardTitle>
+            <CardDescription>Download a random Python code sample from our database</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
               </div>
-              <Button onClick={handleDownload} size="lg" className="w-full">
-                <Download className="mr-2 h-5 w-5" /> Download Code
-              </Button>
-            </>
-          ) : (
-            <div className="text-center space-y-4">
-              <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
-              <p className="text-muted-foreground">
-                Complete some audits and save Python code to enable downloads.
-              </p>
-              <Button 
-                onClick={() => router.push('/urls')} 
-                variant="outline" 
-                className="w-full"
-              >
-                Go to Audits
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <p className="text-sm text-muted-foreground mt-4 text-center max-w-md">
-        {randomCode ? 
-          "This code was randomly selected from completed audits. Each download will show a different sample." :
-          "Start by completing audits and saving Python code to build your collection of downloadable samples."
-        }
-      </p>
+            ) : randomCode ? (
+              <ScrollArea className="h-40 border rounded-md p-4 bg-muted/50">
+                <pre className="text-sm font-mono whitespace-pre-wrap">{randomCode}</pre>
+              </ScrollArea>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-40 text-center p-4">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-2"/>
+                <p className="text-muted-foreground">No Python code samples available.</p>
+                <p className="text-sm text-muted-foreground mt-1">Complete some audits to save code samples.</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => router.push('/audits')}
+                >
+                  Go to Audits
+                </Button>
+              </div>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button 
+              className="w-full" 
+              onClick={handleDownloadCode}
+              disabled={!randomCode}
+            >
+              <Download className="mr-2 h-4 w-4"/>
+              Download Code
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Report Download Box */}
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl">
+              <FileText className="mr-2 h-6 w-6 text-primary"/>
+              Submitted Reports
+            </CardTitle>
+            <CardDescription>Download a random submitted report from our database</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-40">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : randomReport ? (
+              <div className="flex flex-col items-center justify-center h-40 text-center p-4">
+                <FileText className="h-12 w-12 text-primary mb-2"/>
+                <p className="text-muted-foreground">Report available for download</p>
+                <p className="text-sm text-muted-foreground mt-1">Task ID: {randomReport.taskId}</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-40 text-center p-4">
+                <AlertCircle className="h-12 w-12 text-muted-foreground mb-2"/>
+                <p className="text-muted-foreground">No submitted reports available.</p>
+                <p className="text-sm text-muted-foreground mt-1">Complete some tasks and submit reports.</p>
+                <Button 
+                  variant="outline" 
+                  className="mt-4"
+                  onClick={() => router.push('/tasks')}
+                >
+                  Go to Tasks
+                </Button>
+              </div>
+            )}
+          </CardContent>
+          <CardFooter>
+            <Button 
+              className="w-full" 
+              onClick={handleDownloadReport}
+              disabled={!randomReport}
+            >
+              <Download className="mr-2 h-4 w-4"/>
+              Download Report
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }
