@@ -31,15 +31,22 @@ npm run dev
 
 The application will be available at `http://localhost:3000`
 
-## Default Login Credentials
+## Authentication
+
+### Registration
+- Visit `/register` to create a new account
+- Fill in your name, email, and password
+- After successful registration, you'll be redirected to the login page
+
+### Default Login Credentials
 
 The application comes with two default accounts for testing:
 
-### Admin Account
+#### Admin Account
 - Email: admin@example.com
 - Password: admin@password123
 
-### Regular User Account
+#### Regular User Account
 - Email: user@example.com
 - Password: password
 
@@ -48,14 +55,15 @@ The application comes with two default accounts for testing:
 - Next.js authentication using NextAuth.js
 - JWT-based session management
 - Role-based access control (Admin and Regular User roles)
-- Custom login page
+- Custom login and registration pages
 - Secure password handling
 
 ## Project Structure
 
 - `/src/pages/api/auth` - Authentication API routes
 - `/src/lib/auth` - Authentication utilities
-- `/src/pages` - Next.js pages including the login page
+- `/src/pages` - Next.js pages including login and registration
+- `/src/app` - Next.js app directory with pages and components
 
 ## Security Notes
 
