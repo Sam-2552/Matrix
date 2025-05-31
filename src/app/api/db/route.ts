@@ -380,82 +380,158 @@ export async function POST(request: Request) {
           });
         }
         return NextResponse.json({ success: true });
+      // case 'updateTask':
+      //   // Update the main task
+      //   db.prepare(`
+      //     UPDATE tasks 
+      //     SET title = ?, description = ?, userId = ?, assignedItemType = ?, 
+      //         assignedAgencyId = ?, status = ?
+      //     WHERE id = ?
+      //   `).run(
+      //     data.title,
+      //     data.description,
+      //     data.userId,
+      //     data.assignedItemType,
+      //     data.assignedAgencyId,
+      //     data.status,
+      //     data.id
+      //   );
+
+      //   // Update comments if provided
+      //   if (data.comments) {
+      //     // First, delete existing comments
+      //     db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(data.id);
+          
+      //     // Then insert new comments
+      //     const insertComment = db.prepare(`
+      //       INSERT INTO task_comments (id, taskId, text, timestamp)
+      //       VALUES (?, ?, ?, ?)
+      //     `);
+      //     data.comments.forEach((comment: TaskComment) => {
+      //       insertComment.run(comment.id, data.id, comment.text, comment.timestamp);
+      //     });
+      //   }
+
+      //   // Update URL progress details if provided
+      //   if (data.urlProgressDetails) {
+      //     // First, delete existing progress details
+      //     db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
+          
+      //     // Then insert new progress details
+      //     const insertProgress = db.prepare(`
+      //       INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+      //       VALUES (?, ?, ?, ?, ?)
+      //     `);
+      //     data.urlProgressDetails.forEach((progress: UrlProgressDetail) => {
+      //       insertProgress.run(
+      //         progress.id,
+      //         data.id,
+      //         progress.urlId,
+      //         progress.status,
+      //         progress.progressPercentage
+      //       );
+      //     });
+      //   }
+
+      //   return NextResponse.json({ success: true });
+      // case 'updateUrlStatus':
+      //   db.prepare('UPDATE urls SET status = ?, pythonCode = ?, executionOutput = ? WHERE id = ?')
+      //     .run(data.status, data.pythonCode || '', data.executionOutput || '', data.id);
+      //   return NextResponse.json({ success: true });
+      // case 'addTaskComment':
+      //   db.prepare(`
+      //     INSERT INTO task_comments (id, taskId, text, timestamp)
+      //     VALUES (?, ?, ?, ?)
+      //   `).run(data.id, data.taskId, data.text, data.timestamp);
+      //   return NextResponse.json({ success: true });
+      // case 'updateUrlProgress':
+      //   db.prepare(`
+      //     INSERT OR REPLACE INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+      //     VALUES (?, ?, ?, ?, ?)
+      //   `).run(
+      //     data.id || crypto.randomUUID(),
+      //     data.taskId,
+      //     data.urlId,
+      //     data.status,
+      //     data.progressPercentage
+      //   );
+      //   return NextResponse.json({ success: true });
       case 'updateTask':
-        // Update the main task
-        db.prepare(`
-          UPDATE tasks 
-          SET title = ?, description = ?, userId = ?, assignedItemType = ?, 
-              assignedAgencyId = ?, status = ?
-          WHERE id = ?
-        `).run(
-          data.title,
-          data.description,
-          data.userId,
-          data.assignedItemType,
-          data.assignedAgencyId,
-          data.status,
-          data.id
-        );
+    // Update the main task - VULNERABLE
+    db.exec(`
+      UPDATE tasks 
+      SET title = '${data.title}', 
+          description = '${data.description}', 
+          userId = '${data.userId}', 
+          assignedItemType = '${data.assignedItemType}', 
+          assignedAgencyId = '${data.assignedAgencyId}', 
+          status = '${data.status}'
+      WHERE id = '${data.id}'
+    `);
 
-        // Update comments if provided
-        if (data.comments) {
-          // First, delete existing comments
-          db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(data.id);
-          
-          // Then insert new comments
-          const insertComment = db.prepare(`
-            INSERT INTO task_comments (id, taskId, text, timestamp)
-            VALUES (?, ?, ?, ?)
-          `);
-          data.comments.forEach((comment: TaskComment) => {
-            insertComment.run(comment.id, data.id, comment.text, comment.timestamp);
-          });
-        }
-
-        // Update URL progress details if provided
-        if (data.urlProgressDetails) {
-          // First, delete existing progress details
-          db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
-          
-          // Then insert new progress details
-          const insertProgress = db.prepare(`
-            INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
-            VALUES (?, ?, ?, ?, ?)
-          `);
-          data.urlProgressDetails.forEach((progress: UrlProgressDetail) => {
-            insertProgress.run(
-              progress.id,
-              data.id,
-              progress.urlId,
-              progress.status,
-              progress.progressPercentage
-            );
-          });
-        }
-
-        return NextResponse.json({ success: true });
-      case 'updateUrlStatus':
-        db.prepare('UPDATE urls SET status = ?, pythonCode = ?, executionOutput = ? WHERE id = ?')
-          .run(data.status, data.pythonCode || '', data.executionOutput || '', data.id);
-        return NextResponse.json({ success: true });
-      case 'addTaskComment':
-        db.prepare(`
+    // Update comments if provided
+    if (data.comments && Array.isArray(data.comments)) {
+      // First, delete existing comments - VULNERABLE
+      db.exec(`DELETE FROM task_comments WHERE taskId = '${data.id}'`);
+      
+      // Then insert new comments - VULNERABLE
+      data.comments.forEach((comment) => { // Assuming comment is an object {id, text, timestamp}
+        // Ensure comment properties exist to avoid 'undefined' in query
+        const commentId = comment.id || crypto.randomUUID();
+        const commentText = comment.text || '';
+        const commentTimestamp = comment.timestamp || Date.now();
+        db.exec(`
           INSERT INTO task_comments (id, taskId, text, timestamp)
-          VALUES (?, ?, ?, ?)
-        `).run(data.id, data.taskId, data.text, data.timestamp);
-        return NextResponse.json({ success: true });
-      case 'updateUrlProgress':
-        db.prepare(`
-          INSERT OR REPLACE INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(
-          data.id || crypto.randomUUID(),
-          data.taskId,
-          data.urlId,
-          data.status,
-          data.progressPercentage
-        );
-        return NextResponse.json({ success: true });
+          VALUES ('${commentId}', '${data.id}', '${commentText}', '${commentTimestamp}')
+        `);
+      });
+    }
+
+    // Update URL progress details if provided
+    if (data.urlProgressDetails && Array.isArray(data.urlProgressDetails)) {
+      // First, delete existing progress details - VULNERABLE
+      db.exec(`DELETE FROM url_progress_details WHERE taskId = '${data.id}'`);
+      
+      // Then insert new progress details - VULNERABLE
+      data.urlProgressDetails.forEach((progress) => { // Assuming progress is an object {id, urlId, status, progressPercentage}
+        // Ensure progress properties exist
+        const progressId = progress.id || crypto.randomUUID();
+        const progressUrlId = progress.urlId || '';
+        const progressStatus = progress.status || '';
+        const progressPercentage = progress.progressPercentage || 0;
+        db.exec(`
+          INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+          VALUES ('${progressId}', '${data.id}', '${progressUrlId}', '${progressStatus}', ${progressPercentage})
+        `); // Note: progressPercentage is not quoted assuming it's a number. If it can be a string, quote it.
+      });
+    }
+
+    return NextResponse.json({ success: true });
+
+  case 'updateUrlStatus':
+    // VULNERABLE: Attacker's input is directly inserted into the query string.
+    // Example: data.id = "1'; DROP TABLE urls; --"
+    // Example: data.status = "malicious', pythonCode='evil code" (if not properly escaped)
+    db.exec(`UPDATE urls SET status = '${data.status}', pythonCode = '${data.pythonCode || ''}', executionOutput = '${data.executionOutput || ''}' WHERE id = '${data.id}'`);
+    return NextResponse.json({ success: true });
+
+  case 'addTaskComment':
+    // VULNERABLE: Attacker's input for 'text' could contain malicious SQL.
+    // Example: data.text = "Nice comment'); INSERT INTO users (username, password) VALUES ('hacker', 'pwned'); --"
+    db.exec(`
+      INSERT INTO task_comments (id, taskId, text, timestamp)
+      VALUES ('${data.id}', '${data.taskId}', '${data.text}', '${data.timestamp}')
+    `);
+    return NextResponse.json({ success: true });
+
+  case 'updateUrlProgress':
+    // VULNERABLE: Multiple fields are concatenated, creating several points of vulnerability.
+    // Example: data.status = "completed'; UPDATE tasks SET status = 'compromised' WHERE id = 'some_task_id'; --"
+    db.exec(`
+      INSERT OR REPLACE INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
+      VALUES ('${data.id || crypto.randomUUID()}', '${data.taskId}', '${data.urlId}', '${data.status}', ${data.progressPercentage})
+    `); // Note: progressPercentage is not quoted.
+    return NextResponse.json({ success: true });
       case 'deleteAgency':
         // First delete associated URLs
         db.prepare('DELETE FROM urls WHERE agencyId = ?').run(data.id);
@@ -525,6 +601,6 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error('Database error:', error);
-    return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    return NextResponse.json({ error: 'Database error' + error }, { status: 500 });
   }
 }
