@@ -110,6 +110,7 @@ const initializeDatabase = () => {
       status TEXT NOT NULL,
       pythonCode TEXT,
       executionOutput TEXT,
+      reportPath TEXT,
       FOREIGN KEY (agencyId) REFERENCES agencies(id)
     )
   `);
@@ -120,6 +121,10 @@ const initializeDatabase = () => {
   }
   if (!columnExists('urls', 'executionOutput')) {
     db.exec('ALTER TABLE urls ADD COLUMN executionOutput TEXT');
+  }
+  // Migration: add reportPath column if missing
+  if (!columnExists('urls', 'reportPath')) {
+    db.exec('ALTER TABLE urls ADD COLUMN reportPath TEXT');
   }
 
   // Tasks table
@@ -206,7 +211,8 @@ const accessControl = {
     'updateTask',
     'updateUrlStatus',
     'updateUrlExecutionOutput',
-    'updateAgencyComments'
+    'updateAgencyComments',
+    'updateUrlReport'
   ],
   // Actions that require authentication but can be performed by any user
   authenticated: [
@@ -224,7 +230,8 @@ const accessControl = {
     'updateTask',
     'updateUrlStatus',
     'updateUrlExecutionOutput',
-    'updateAgencyComments'
+    'updateAgencyComments',
+    'updateUrlReport'
   ]
 };
 
@@ -488,6 +495,17 @@ export async function POST(request: Request) {
         } catch (error) {
           console.error('Error updating task report:', error);
           return NextResponse.json({ error: 'Failed to update task report' }, { status: 500 });
+        }
+      case 'updateUrlReport':
+        if (!data?.id || !data?.reportPath) {
+          return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+        try {
+          db.prepare('UPDATE urls SET reportPath = ? WHERE id = ?').run(data.reportPath, data.id);
+          return NextResponse.json({ success: true });
+        } catch (error) {
+          console.error('Error updating URL report:', error);
+          return NextResponse.json({ error: 'Failed to update URL report' }, { status: 500 });
         }
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

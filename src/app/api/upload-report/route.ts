@@ -1,70 +1,103 @@
 import { NextResponse } from 'next/server';
-import { writeFile } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const taskId = formData.get('taskId') as string;
+    // Get the session
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
 
-    if (!file || !taskId) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
+    const formData = await request.formData();
+    
+    // Debug logging
+    console.log('Form data entries:');
+    for (const [key, value] of formData.entries()) {
+      console.log(`${key}: ${value instanceof File ? `File: ${value.name}` : value}`);
+    }
+
+    const file = formData.get('file') as File;
+    const urlId = formData.get('urlId') as string;
+
+    // More detailed error messages
+    if (!file) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No file was provided in the request' 
+      }, { status: 400 });
+    }
+
+    if (!urlId) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No URL ID was provided in the request' 
+      }, { status: 400 });
     }
 
     // Create reports directory if it doesn't exist
     const reportsDir = path.join(process.cwd(), 'data', 'reports');
-    await createDirIfNotExists(reportsDir);
+    try {
+      await mkdir(reportsDir, { recursive: true });
+    } catch (error) {
+      console.error('Error creating reports directory:', error);
+    }
 
     // Generate unique filename
-    const fileExtension = path.extname(file.name);
-    const fileName = `${taskId}_${uuidv4()}${fileExtension}`;
+    const fileName = `${uuidv4()}-${file.name}`;
     const filePath = path.join(reportsDir, fileName);
 
-    // Convert file to buffer and save
+    // Convert File to Buffer and save
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     await writeFile(filePath, buffer);
 
-    // Get the host from the request headers
-    const host = request.headers.get('host');
-    const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
-    const baseUrl = `${protocol}://${host}`;
+    // Get the base URL from the request
+    const url = new URL(request.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
 
-    // Update task with report file path
+    // Get the session token from the request headers
+    const sessionToken = request.headers.get('cookie')?.split(';')
+      .find(c => c.trim().startsWith('next-auth.session-token='))
+      ?.split('=')[1];
+
+    // Update the database using the existing API endpoint
     const response = await fetch(`${baseUrl}/api/db`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Cookie': `next-auth.session-token=${sessionToken}`
       },
       body: JSON.stringify({
-        action: 'updateTaskReport',
+        action: 'updateUrlReport',
         data: {
-          taskId,
+          id: urlId,
           reportPath: fileName
         }
-      })
+      }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to update task with report path');
+      throw new Error(errorData.error || 'Failed to update database');
     }
 
     return NextResponse.json({ 
-      success: true,
-      fileName 
+      success: true, 
+      message: 'Report uploaded successfully',
+      fileName
     });
-  } catch (error) {
+
+  } catch (error: unknown) {
     console.error('Error uploading report:', error);
-    return NextResponse.json(
-      { error: 'Failed to upload report' },
-      { status: 500 }
-    );
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    }, { status: 500 });
   }
 }
 

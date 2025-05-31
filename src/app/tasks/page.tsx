@@ -78,7 +78,7 @@ export default function MyTasksPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('taskId', taskId);
+      formData.append('urlId', taskId);
 
       const response = await fetch('/api/upload-report', {
         method: 'POST',
@@ -86,7 +86,8 @@ export default function MyTasksPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload report');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload report');
       }
 
       toast({
