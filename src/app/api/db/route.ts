@@ -136,6 +136,7 @@ const initializeDatabase = () => {
       userId TEXT NOT NULL,
       assignedItemType TEXT NOT NULL,
       assignedAgencyId TEXT,
+      assignedUrlIds TEXT,
       status TEXT NOT NULL,
       reportPath TEXT DEFAULT NULL,
       FOREIGN KEY (userId) REFERENCES users(id),
@@ -150,6 +151,16 @@ const initializeDatabase = () => {
     // Ignore error if column already exists
     if (!error.message.includes('duplicate column name')) {
       console.error('Error adding reportPath column:', error);
+    }
+  }
+
+  // Force add assignedUrlIds column if it doesn't exist
+  try {
+    db.exec('ALTER TABLE tasks ADD COLUMN assignedUrlIds TEXT');
+  } catch (error: any) {
+    // Ignore error if column already exists
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding assignedUrlIds column:', error);
     }
   }
 
@@ -272,12 +283,13 @@ export async function GET(request: Request) {
       case 'getUrls':
         return NextResponse.json(db.prepare('SELECT * FROM urls').all());
       case 'getTasks':
-        const tasks = db.prepare('SELECT * FROM tasks').all() as Task[];
+        const tasks = db.prepare('SELECT * FROM tasks').all() as (Task & { assignedUrlIds: string | null })[];
         const tasksWithDetails = tasks.map(task => {
           const comments = db.prepare('SELECT * FROM task_comments WHERE taskId = ?').all(task.id) as TaskComment[];
           const urlProgress = db.prepare('SELECT * FROM url_progress_details WHERE taskId = ?').all(task.id) as UrlProgressDetail[];
           return {
             ...task,
+            assignedUrlIds: task.assignedUrlIds ? JSON.parse(task.assignedUrlIds) : undefined,
             comments,
             urlProgressDetails: urlProgress
           };
@@ -336,8 +348,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true });
       case 'addTask':
         const insertTask = db.prepare(`
-          INSERT INTO tasks (id, title, description, userId, assignedItemType, assignedAgencyId, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO tasks (id, title, description, userId, assignedItemType, assignedAgencyId, assignedUrlIds, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         insertTask.run(
           data.id,
@@ -346,6 +358,7 @@ export async function POST(request: Request) {
           data.userId,
           data.assignedItemType,
           data.assignedAgencyId,
+          data.assignedUrlIds ? JSON.stringify(data.assignedUrlIds) : null,
           data.status
         );
         if (data.comments?.length) {

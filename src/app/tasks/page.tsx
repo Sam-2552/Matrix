@@ -76,9 +76,29 @@ export default function MyTasksPage() {
     }
 
     try {
+      const task = userTasks.find(t => t.id === taskId);
+      if (!task) {
+        throw new Error('Task not found');
+      }
+
+      // Get the first URL ID from the task's assigned URLs
+      let urlId: string | undefined;
+      if (task.assignedItemType === 'urls' && task.assignedUrlIds && task.assignedUrlIds.length > 0) {
+        urlId = task.assignedUrlIds[0];
+      } else if (task.assignedItemType === 'agency' && task.assignedAgencyId) {
+        const agencyUrls = allUrls.filter(u => u.agencyId === task.assignedAgencyId);
+        if (agencyUrls.length > 0) {
+          urlId = agencyUrls[0].id;
+        }
+      }
+
+      if (!urlId) {
+        throw new Error('No URLs found for this task');
+      }
+
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('urlId', taskId);
+      formData.append('urlId', urlId);
 
       const response = await fetch('/api/upload-report', {
         method: 'POST',
@@ -243,11 +263,11 @@ export default function MyTasksPage() {
                     <Accordion type="single" collapsible className="w-full">
                       <AccordionItem value="comments">
                         <AccordionTrigger className="text-sm hover:no-underline">
-                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments?.length || 0})</span>
+                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments?.length ?? 0})</span>
                         </AccordionTrigger>
                         <AccordionContent className="pt-2">
                           <ScrollArea className="h-40 mb-2 border rounded-md p-2">
-                            {task.comments?.length > 0 ? (
+                            {task.comments && task.comments.length > 0 ? (
                               <ul className="space-y-3">
                                 {task.comments.map((comment: TaskComment) => (
                                   <li key={comment.id} className="text-xs">

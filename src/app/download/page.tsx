@@ -41,19 +41,21 @@ export default function DownloadPage() {
 
   const fetchRandomReport = async () => {
     try {
-      const response = await fetch('/api/db?action=getTasks');
-      const tasks = await response.json();
-      const tasksWithReports = tasks.filter((task: any) => task.reportPath);
+      const response = await fetch('/api/db?action=getUrls');
+      const urls = await response.json();
+      const urlsWithReports = urls.filter((url: any) => url.reportPath);
       
-      if (tasksWithReports.length > 0) {
-        const randomTask = tasksWithReports[Math.floor(Math.random() * tasksWithReports.length)];
+      if (urlsWithReports.length > 0) {
+        const randomUrl = urlsWithReports[Math.floor(Math.random() * urlsWithReports.length)];
         setRandomReport({
-          taskId: randomTask.id,
-          fileName: randomTask.reportPath
+          taskId: randomUrl.id,
+          fileName: randomUrl.reportPath
         });
       }
     } catch (error) {
       console.error('Error fetching random report:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -81,7 +83,7 @@ export default function DownloadPage() {
     
     try {
       const response = await fetch(`/api/download-report?fileName=${randomReport.fileName}`);
-      if (!response.ok) throw new Error('Failed to download report');
+      // if (!response.ok) throw new Error('Failed to download report');
       
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -176,7 +178,8 @@ export default function DownloadPage() {
               <div className="flex flex-col items-center justify-center h-40 text-center p-4">
                 <FileText className="h-12 w-12 text-primary mb-2"/>
                 <p className="text-muted-foreground">Report available for download</p>
-                <p className="text-sm text-muted-foreground mt-1">Task ID: {randomReport.taskId}</p>
+                <p className="text-sm text-muted-foreground mt-1">URL ID: {randomReport.taskId}</p>
+                <p className="text-sm text-muted-foreground">File: {randomReport.fileName}</p>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-40 text-center p-4">

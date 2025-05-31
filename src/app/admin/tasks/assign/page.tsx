@@ -55,6 +55,7 @@ export default function AssignTaskPage() {
       userId: selectedUserId,
       assignedItemType: assignmentType,
       assignedAgencyId: assignmentType === 'agency' ? selectedAgencyId : undefined,
+      assignedUrlIds: assignmentType === 'urls' ? selectedUrlIds : undefined,
     });
 
     // Reset form
