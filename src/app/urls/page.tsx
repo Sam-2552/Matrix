@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import DOMPurify from 'dompurify';
 
 export default function ViewMyUrlsPage() {
-  const { currentUser, getTasksForUser, urls: allUrls, agencies } = useAppContext();
+  const { currentUser, getTasksForUser, urls: allUrls, agencies, updateUrlStatus } = useAppContext();
   const router = useRouter();
   const [urls, setUrls] = useState<UrlItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -28,31 +28,15 @@ export default function ViewMyUrlsPage() {
       router.replace('/login');
       return;
     }
-
-    const fetchData = async () => {
-      try {
-        const urlsData = await getUrls();
-        setUrls(urlsData);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
+    setIsLoading(false);
   }, [currentUser, router]);
 
   const handleStatusChange = async (urlId: string, newStatus: UrlStatus) => {
     try {
-      const url = urls.find(u => u.id === urlId);
+      const url = allUrls.find(u => u.id === urlId);
       if (!url) return;
 
       await updateUrlStatus(urlId, newStatus, url.pythonCode);
-      setUrls(prev => prev.map(url =>
-        url.id === urlId ? { ...url, status: newStatus } : url
-      ));
-
       if (newStatus === 'completed' && url.pythonCode) {
         executePythonCode(urlId, url.pythonCode);
       }
@@ -63,10 +47,6 @@ export default function ViewMyUrlsPage() {
 
   const executePythonCode = async (urlId: string, code: string) => {
     try {
-      setUrls(prev => prev.map(url =>
-        url.id === urlId ? { ...url, isExecuting: true } : url
-      ));
-
       const response = await fetch('/api/execute-python', {
         method: 'POST',
         headers: {
@@ -83,37 +63,24 @@ export default function ViewMyUrlsPage() {
       }
 
       const result = await response.json();
-      
-      setUrls(prev => prev.map(url =>
-        url.id === urlId ? { 
-          ...url, 
-          isExecuting: false,
-          executionOutput: result.output,
-          status: 'completed'
-        } : url
-      ));
+      await updateUrlStatus(urlId, 'completed', code, result.output);
     } catch (error: unknown) {
       console.error('Error executing Python code:', error);
-      setUrls(prev => prev.map(url =>
-        url.id === urlId ? { 
-          ...url, 
-          isExecuting: false,
-          executionOutput: error instanceof Error ? error.message : 'Unknown error occurred',
-          status: 'failed'
-        } : url
-      ));
+      await updateUrlStatus(
+        urlId,
+        'failed',
+        code,
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
     }
   };
 
   const handleCodeSave = async (urlId: string, code: string) => {
     try {
-      const url = urls.find(u => u.id === urlId);
+      const url = allUrls.find(u => u.id === urlId);
       if (!url) return;
 
       await updateUrlStatus(urlId, url.status, code);
-      setUrls(prev => prev.map(url =>
-        url.id === urlId ? { ...url, pythonCode: code } : url
-      ));
     } catch (error) {
       console.error('Error saving Python code:', error);
     }
@@ -121,7 +88,6 @@ export default function ViewMyUrlsPage() {
 
   const handleAudit = async (urlId: string, url: string) => {
     try {
-      // Add URL to auditing set
       setAuditingUrls(prev => new Set(prev).add(urlId));
 
       const response = await fetch('/api/ping-url', {
@@ -137,16 +103,12 @@ export default function ViewMyUrlsPage() {
       }
 
       const result = await response.json();
-      
-      // Update URL status based on ping result
-      await updateUrlStatus(urlId, result.success ? 'in_progress' : 'failed');
-      setUrls(prev => prev.map(u =>
-        u.id === urlId ? { 
-          ...u, 
-          status: result.success ? 'in_progress' : 'failed',
-          executionOutput: result.message
-        } : u
-      ));
+      await updateUrlStatus(
+        urlId,
+        result.success ? 'in_progress' : 'failed',
+        undefined,
+        result.message
+      );
 
     } catch (error) {
       console.error('Error auditing URL:', error);
@@ -156,7 +118,6 @@ export default function ViewMyUrlsPage() {
         variant: "destructive"
       });
     } finally {
-      // Remove URL from auditing set
       setAuditingUrls(prev => {
         const newSet = new Set(prev);
         newSet.delete(urlId);

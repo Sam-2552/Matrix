@@ -210,12 +210,21 @@ const accessControl = {
   ],
   // Actions that require authentication but can be performed by any user
   authenticated: [
+    'getUsers',
+    'deleteAgency',
+    'deleteTask',
+    'deleteUrl',
+    'deleteUser',
     'getAgencies',
     'getUrls',
     'getTasks',
     'getAgencyComments',
     'addTaskComment',
-    'updateUrlProgress'
+    'updateUrlProgress',
+    'updateTask',
+    'updateUrlStatus',
+    'updateUrlExecutionOutput',
+    'updateAgencyComments'
   ]
 };
 

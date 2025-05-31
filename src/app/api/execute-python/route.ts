@@ -3,6 +3,8 @@ import { spawn } from 'child_process';
 import { writeFile, unlink } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 
 export async function POST(request: Request) {
   const { urlId, code } = await request.json();
@@ -52,11 +54,27 @@ export async function POST(request: Request) {
       });
     });
 
+    // Get the session
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      throw new Error('Not authenticated');
+    }
+
+    // Get the base URL from the request
+    const url = new URL(request.url);
+    const baseUrl = `${url.protocol}//${url.host}`;
+
+    // Get the session token from the request headers
+    const sessionToken = request.headers.get('cookie')?.split(';')
+      .find(c => c.trim().startsWith('next-auth.session-token='))
+      ?.split('=')[1];
+
     // Update the database using the existing API endpoint
-    const response = await fetch('http://localhost:9002/api/db', {
+    const response = await fetch(`${baseUrl}/api/db`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Cookie': `next-auth.session-token=${sessionToken}`
       },
       body: JSON.stringify({
         action: 'updateUrlExecutionOutput',
@@ -69,7 +87,8 @@ export async function POST(request: Request) {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to update database');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to update database');
     }
 
     return NextResponse.json({ 

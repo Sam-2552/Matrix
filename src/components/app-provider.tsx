@@ -27,6 +27,7 @@ interface AppContextType {
   urls: UrlItem[];
   addUrl: (link: string, agencyId: string | null) => Promise<void>;
   deleteUrl: (urlId: string) => Promise<void>;
+  updateUrlStatus: (urlId: string, status: UrlStatus, pythonCode?: string, executionOutput?: string) => Promise<void>;
   users: AppUser[];
   addUser: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
@@ -376,6 +377,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateUrlStatus = async (urlId: string, status: UrlStatus, pythonCode?: string, executionOutput?: string) => {
+    try {
+      await db.updateUrlStatus(urlId, status, pythonCode, executionOutput);
+      setUrls(prev => prev.map(url =>
+        url.id === urlId
+          ? { ...url, status, pythonCode: pythonCode || url.pythonCode, executionOutput: executionOutput || url.executionOutput }
+          : url
+      ));
+      toast({ title: 'URL status updated' });
+    } catch (error) {
+      console.error('Error updating URL status:', error);
+      toast({
+        title: 'Error updating URL status',
+        description: 'Failed to update URL status',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const value = {
     actualUser,
     currentUser,
@@ -386,6 +406,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     urls,
     addUrl,
     deleteUrl,
+    updateUrlStatus,
     users,
     addUser,
     deleteUser,
