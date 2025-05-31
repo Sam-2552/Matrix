@@ -15,7 +15,7 @@ export default NextAuth({
         if (!credentials?.email || !credentials?.password) throw new Error("Missing credentials");
         
         // Hardcoded admin and user accounts
-        if (credentials.email === "admin@example.com" && credentials.password === "admin@password123") {
+        if (credentials.email === "admin@example.com" && credentials.password === "admin@123") {
           return { 
             id: "admin-1", 
             name: "Admin User", 
