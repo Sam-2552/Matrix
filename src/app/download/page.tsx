@@ -139,7 +139,7 @@ export default function DownloadPage() {
                 <Button 
                   variant="outline" 
                   className="mt-4"
-                  onClick={() => router.push('/audits')}
+                  onClick={() => router.push('/urls')}
                 >
                   Go to Audits
                 </Button>

@@ -16,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import DOMPurify from 'dompurify';
 
 export default function ViewMyUrlsPage() {
-  const { currentUser, getTasksForUser, urls: allUrls, agencies, updateUrlStatus } = useAppContext();
+  const { currentUser, getTasksForUser, urls: allUrls, agencies, updateUrlStatus, updateTaskStatus } = useAppContext();
   const router = useRouter();
   const [urls, setUrls] = useState<UrlItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +109,22 @@ export default function ViewMyUrlsPage() {
         undefined,
         result.message
       );
+
+      // Find the task associated with this URL and update its status
+      const task = userTasks.find(task => {
+        if (task.assignedItemType === 'urls' && task.assignedUrlIds?.includes(urlId)) {
+          return true;
+        }
+        if (task.assignedItemType === 'agency') {
+          const url = allUrls.find(u => u.id === urlId);
+          return url?.agencyId === task.assignedAgencyId;
+        }
+        return false;
+      });
+
+      if (task) {
+        await updateTaskStatus(task.id, 'in-progress');
+      }
 
     } catch (error) {
       console.error('Error auditing URL:', error);
