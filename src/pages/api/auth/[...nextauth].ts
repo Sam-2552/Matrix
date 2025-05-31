@@ -3,7 +3,15 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { verifyPassword, getUserByEmail } from "@/lib/auth";
 import type { NextAuthOptions, User } from "next-auth";
 
-export default NextAuth({
+interface DBUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  passwordHash: string;
+}
+
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -34,7 +42,7 @@ export default NextAuth({
         }
 
         // Regular authentication flow for other users
-        const user = await getUserByEmail(credentials.email);
+        const user = await getUserByEmail(credentials.email) as DBUser | null;
         if (!user) throw new Error("No user found");
         const isValid = await verifyPassword(credentials.password, user.passwordHash);
         if (!isValid) throw new Error("Invalid password");
@@ -73,4 +81,6 @@ export default NextAuth({
   pages: {
     signIn: "/login"
   }
-} as NextAuthOptions); 
+};
+
+export default NextAuth(authOptions); 

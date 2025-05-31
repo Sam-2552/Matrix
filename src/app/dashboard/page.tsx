@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useSession } from "next-auth/react";
 
 export default function UserDashboardPage() {
-  const { getTasksForUser, agencies, urls } = useAppContext();
+  const { getTasksForUser, agencies, urls, currentUser } = useAppContext();
   const router = useRouter();
   const { data: session, status } = useSession();
 
@@ -20,10 +20,10 @@ export default function UserDashboardPage() {
     }
   }, [status, router]);
 
-  if (status === "loading") return <div>Loading...</div>;
+  if (status === "loading" || !currentUser) return <div>Loading...</div>;
   if (status === "unauthenticated") return null;
 
-  const userTasks = getTasksForUser(session.user.id);
+  const userTasks = getTasksForUser(currentUser.id);
   
   // Simplified count of assigned URLs for the dashboard card
   let assignedUrlsCount = 0;
@@ -39,7 +39,7 @@ export default function UserDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Welcome, {session?.user?.name || session?.user?.email || "User"}!</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Welcome, {currentUser.name || currentUser.email || "User"}!</h1>
       <p className="text-muted-foreground">Here's an overview of your tasks and activities.</p>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -97,7 +97,7 @@ export default function UserDashboardPage() {
       <TaskProgressChart 
         tasks={userTasks} 
         title="My Task Progress"
-        description={`Overview of tasks assigned to ${session?.user?.name || session?.user?.email || "User"}`}
+        description={`Overview of tasks assigned to ${currentUser.name || currentUser.email || "User"}`}
       />
     </div>
   );

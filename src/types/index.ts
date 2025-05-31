@@ -6,7 +6,9 @@ export type UrlStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
 export interface AppUser {
   id: string;
   name: string;
+  email: string;
   role: UserRole;
+  passwordHash?: string;
 }
 
 export interface Agency {

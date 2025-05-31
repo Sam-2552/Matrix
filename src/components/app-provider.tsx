@@ -10,10 +10,11 @@ import { hash } from 'bcryptjs';
 import { useSession } from "next-auth/react";
 
 interface SessionUser {
-  id: string;
+  id?: string;
   name?: string | null;
   email?: string | null;
   image?: string | null;
+  role?: string;
 }
 
 interface AppContextType {
@@ -68,10 +69,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           db.getTasks()
         ]);
 
-        setUsers(usersData);
-        setAgencies(agenciesData);
-        setUrls(urlsData);
-        setTasks(tasksData);
+        // Ensure usersData is an array
+        setUsers(Array.isArray(usersData) ? usersData : []);
+        setAgencies(Array.isArray(agenciesData) ? agenciesData : []);
+        setUrls(Array.isArray(urlsData) ? urlsData : []);
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
         setIsLoading(false);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -89,7 +91,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Sync session with user state
   useEffect(() => {
-    if (status === "authenticated" && session?.user?.email && users.length > 0) {
+    if (status === "authenticated" && session?.user?.email) {
+      // If user data is not loaded yet, set role based on session email
+      if (!Array.isArray(users) || users.length === 0) {
+        const isAdmin = session.user.email === 'admin@example.com';
+        const role = isAdmin ? 'admin' : 'user';
+        setCurrentRole(role);
+        // Create a temporary user object
+        const tempUser: AppUser = {
+          id: 'temp',
+          name: session.user.name || 'User',
+          email: session.user.email,
+          role: role
+        };
+        setActualUser(tempUser);
+        setCurrentUser(tempUser);
+        return;
+      }
+
+      // Once user data is loaded, set the full user info
       const user = users.find(u => u.email === session.user?.email);
       if (user) {
         console.log('Setting user role:', user.role);
@@ -128,7 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const newUrl: UrlItem = {
         id: uuidv4(),
         link,
-        agencyId,
+        agencyId: agencyId || undefined,
         status: 'pending'
       };
       await db.addUrl(newUrl);
@@ -245,7 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await db.addTaskComment(taskId, comment);
       setTasks(prev => prev.map(task =>
         task.id === taskId
-          ? { ...task, comments: [...task.comments, comment] }
+          ? { ...task, comments: [...(task.comments || []), comment] }
           : task
       ));
       toast({ title: 'Comment added' });

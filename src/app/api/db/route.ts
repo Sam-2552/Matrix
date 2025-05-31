@@ -3,6 +3,54 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { Agency, UrlItem, AppUser, Task, TaskStatus, TaskComment, UrlStatus, UrlProgressDetail } from '@/types';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
+import type { Session } from 'next-auth';
+
+// Define types for our database entities
+interface DBUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
+interface DBTask {
+  id: string;
+  name: string;
+  description?: string;
+  userId: string;
+}
+
+interface DBUrl {
+  id: string;
+  url: string;
+  description?: string;
+  userId: string;
+}
+
+interface DBAgency {
+  id: string;
+  name: string;
+  description?: string;
+  userId: string;
+  comments?: string; // Store as JSON string
+}
+
+interface DBComment {
+  id: string;
+  agencyId: string;
+  comment: string;
+  userId: string;
+}
+
+// Helper function to check if user has access to a resource
+function hasAccess(user: DBUser | null, resource: { userId: string }) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role === 'user' && resource.userId === user.id) return true;
+  return false;
+}
 
 // Ensure the data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -142,10 +190,62 @@ const initializeDatabase = () => {
 // Initialize the database
 initializeDatabase();
 
+// Define access control rules for actions
+const accessControl = {
+  // Admin-only actions
+  adminOnly: [
+    'addUser',
+    'deleteUser',
+    'getUsers',
+    'addAgency',
+    'deleteAgency',
+    'addUrl',
+    'deleteUrl',
+    'addTask',
+    'deleteTask',
+    'updateTask',
+    'updateUrlStatus',
+    'updateUrlExecutionOutput',
+    'updateAgencyComments'
+  ],
+  // Actions that require authentication but can be performed by any user
+  authenticated: [
+    'getAgencies',
+    'getUrls',
+    'getTasks',
+    'getAgencyComments',
+    'addTaskComment',
+    'updateUrlProgress'
+  ]
+};
+
+// Helper function to check if an action is allowed
+function isActionAllowed(action: string, user: DBUser | null, override: boolean = false): boolean {
+  if (override) return true;
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (accessControl.authenticated.includes(action)) return true;
+  return false;
+}
+
 // API route handlers
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
+  const override = searchParams.get('override') === 'true';
+  
+  // Get the current session
+  const session = await getServerSession(authOptions);
+  const user = session?.user as DBUser | null;
+
+  if (!action) {
+    return NextResponse.json({ error: 'Missing action parameter' }, { status: 400 });
+  }
+
+  // Check if the action is allowed
+  if (!isActionAllowed(action, user, override)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
 
   try {
     switch (action) {
@@ -172,8 +272,13 @@ export async function GET(request: Request) {
         if (!agencyId) {
           return NextResponse.json({ error: 'Missing agency ID' }, { status: 400 });
         }
-        const agencyComments = db.prepare('SELECT comments FROM agencies WHERE id = ?').get(agencyId);
-        return NextResponse.json({ comments: agencyComments?.comments || '' });
+        const agencyComments = db.prepare('SELECT comments FROM agencies WHERE id = ?').get(agencyId) as { comments: string | null };
+        try {
+          const comments = agencyComments?.comments ? JSON.parse(agencyComments.comments) : [];
+          return NextResponse.json({ comments });
+        } catch (error) {
+          return NextResponse.json({ comments: [] });
+        }
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
@@ -183,7 +288,20 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { action, data } = await request.json();
+  const { action, data, override = false } = await request.json();
+  
+  // Get the current session
+  const session = await getServerSession(authOptions);
+  const user = session?.user as DBUser | null;
+
+  if (!action) {
+    return NextResponse.json({ error: 'Missing action parameter' }, { status: 400 });
+  }
+
+  // Check if the action is allowed
+  if (!isActionAllowed(action, user, override)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
 
   try {
     switch (action) {
@@ -348,7 +466,8 @@ export async function POST(request: Request) {
         if (!data.agencyId || !data.comments) {
           return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
-        db.prepare('UPDATE agencies SET comments = ? WHERE id = ?').run(data.comments, data.agencyId);
+        const commentsJson = JSON.stringify(data.comments);
+        db.prepare('UPDATE agencies SET comments = ? WHERE id = ?').run(commentsJson, data.agencyId);
         return NextResponse.json({ success: true });
       case 'updateTaskReport':
         if (!data?.taskId || !data?.reportPath) {

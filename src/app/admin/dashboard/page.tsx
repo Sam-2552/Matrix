@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useSession } from "next-auth/react";
 
 export default function AdminDashboardPage() {
-  const { agencies, users, tasks, urls, currentRole } = useAppContext();
+  const { agencies, users, tasks, urls, currentRole, currentUser } = useAppContext();
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -20,7 +20,7 @@ export default function AdminDashboardPage() {
     }
   }, [status, currentRole, router]);
 
-  if (status === "loading") return <div>Loading...</div>;
+  if (status === "loading" || !currentUser) return <div>Loading...</div>;
   if (status === "unauthenticated") {
     router.replace("/login");
     return null;
@@ -31,7 +31,8 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Welcome, {currentUser.name || currentUser.email || "Admin"}!</h1>
+      <p className="text-muted-foreground">Here's an overview of your system.</p>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -84,7 +85,11 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      <TaskProgressChart tasks={tasks} />
+      <TaskProgressChart 
+        tasks={tasks} 
+        title="System Task Progress"
+        description="Overview of all tasks in the system"
+      />
     </div>
   );
 }
