@@ -45,10 +45,10 @@ export const addTask = (task: Task): void => {
   setItem(STORAGE_KEYS.TASKS, [...tasks, task]);
 };
 
-export const updateTask = (taskId: string, updates: Partial<Task>): void => {
-  const tasks = getTasks();
+export const updateTask = (taskId: number, updates: Partial<Task>): void => {
+  const tasks = getTasks(); // tasks here are Task[] where task.id is number
   const updatedTasks = tasks.map(task => 
-    task.id === taskId ? { ...task, ...updates } : task
+    task.id === taskId ? { ...task, ...updates } : task // number === number comparison
   );
   setItem(STORAGE_KEYS.TASKS, updatedTasks);
 };

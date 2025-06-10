@@ -37,35 +37,35 @@ export default function MyTasksPage() {
     return <div>User not found</div>;
   }
 
-  const userTasks = getTasksForUser(session.user.id);
+  const userTasks = getTasksForUser(session.user.id); // task.id is number here
 
-  const handleOverallStatusChange = (taskId: string, status: TaskStatus) => {
-    const task = userTasks.find(t => t.id === taskId);
+  const handleOverallStatusChange = (taskId: number, status: TaskStatus) => { // taskId is number
+    const task = userTasks.find(t => t.id === taskId); // number === number
     if (task && task.assignedItemType === 'agency') {
-      updateTaskStatus(taskId, status);
+      updateTaskStatus(taskId, status); // updateTaskStatus expects number
       // Clear selected file when status changes
-      setSelectedFiles(prev => ({ ...prev, [taskId]: null }));
+      setSelectedFiles(prev => ({ ...prev, [taskId]: null })); // taskId (number) used as key, JS converts to string
     }
   };
 
-  const handleUrlStatusChange = (taskId: string, urlId: string, newStatus: UrlStatus) => {
-    updateUrlProgress(taskId, urlId, newStatus);
+  const handleUrlStatusChange = (taskId: number, urlId: string, newStatus: UrlStatus) => { // taskId is number
+    updateUrlProgress(taskId, urlId, newStatus); // updateUrlProgress expects number for taskId
   };
 
-  const handleUrlProgressChange = (taskId: string, urlId: string, progress: number) => {
-    const task = userTasks.find(t => t.id === taskId);
+  const handleUrlProgressChange = (taskId: number, urlId: string, progress: number) => { // taskId is number
+    const task = userTasks.find(t => t.id === taskId); // number === number
     const urlDetail = task?.urlProgressDetails?.find(upd => upd.urlId === urlId);
     const currentStatus = urlDetail?.status || 'in_progress'; // Fixed status value
 
-    updateUrlProgress(taskId, urlId, progress === 100 ? 'completed' : currentStatus, progress);
+    updateUrlProgress(taskId, urlId, progress === 100 ? 'completed' : currentStatus, progress); // updateUrlProgress expects number for taskId
   };
 
-  const handleFileChange = (taskId: string, file: File | null) => {
-    setSelectedFiles(prev => ({ ...prev, [taskId]: file }));
+  const handleFileChange = (taskId: number, file: File | null) => { // taskId is number
+    setSelectedFiles(prev => ({ ...prev, [taskId]: file })); // taskId (number) used as key
   };
 
-  const handleSubmitReport = async (taskId: string) => {
-    const file = selectedFiles[taskId];
+  const handleSubmitReport = async (taskId: number) => { // taskId is number
+    const file = selectedFiles[taskId]; // taskId (number) used as key
     if (!file) {
       toast({
         title: "Error",
@@ -76,7 +76,7 @@ export default function MyTasksPage() {
     }
 
     try {
-      const task = userTasks.find(t => t.id === taskId);
+      const task = userTasks.find(t => t.id === taskId); // number === number
       if (!task) {
         throw new Error('Task not found');
       }
@@ -116,7 +116,7 @@ export default function MyTasksPage() {
       });
 
       // Clear the selected file after successful upload
-      setSelectedFiles(prev => ({ ...prev, [taskId]: null }));
+      setSelectedFiles(prev => ({ ...prev, [taskId]: null })); // taskId (number) used as key
     } catch (error) {
       console.error('Error uploading report:', error);
       toast({
@@ -127,11 +127,11 @@ export default function MyTasksPage() {
     }
   };
 
-  const handleAddComment = (taskId: string) => {
-    const text = commentTexts[taskId];
+  const handleAddComment = (taskId: number) => { // taskId is number
+    const text = commentTexts[taskId]; // taskId (number) used as key
     if (text && text.trim()) {
-      addTaskComment(taskId, text.trim());
-      setCommentTexts(prev => ({ ...prev, [taskId]: '' }));
+      addTaskComment(taskId, text.trim()); // addTaskComment expects number
+      setCommentTexts(prev => ({ ...prev, [taskId]: '' })); // taskId (number) used as key
     }
   };
 

@@ -28,21 +28,21 @@ export interface UrlItem {
 
 export interface TaskComment {
   id: string;
-  taskId: string;
+  taskId: number;
   text: string;
   timestamp: number;
 }
 
 export interface UrlProgressDetail {
   id: string;
-  taskId: string;
+  taskId: number; // Changed from string to number
   urlId: string;
   status: UrlStatus;
   progressPercentage?: number;
 }
 
 export interface Task {
-  id: string;
+  id: number;
   title: string;
   description?: string;
   userId: string;

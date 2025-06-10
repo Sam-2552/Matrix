@@ -19,7 +19,7 @@ export default function ManageAgenciesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [newAgencyName, setNewAgencyName] = useState('');
-  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null); // Changed any to Task | null
   const [replyText, setReplyText] = useState('');
 
   if (status === "loading") return <div>Loading...</div>;
@@ -37,6 +37,7 @@ export default function ManageAgenciesPage() {
 
   const handleReply = async () => {
     if (selectedTask && replyText.trim()) {
+      // selectedTask.id is number, addTaskComment expects number
       await addTaskComment(selectedTask.id, replyText);
       setReplyText('');
       setSelectedTask(null);

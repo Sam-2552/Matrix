@@ -16,7 +16,7 @@ interface DBUser {
 }
 
 interface DBTask {
-  id: string;
+  id: any; // Changed from string to any to bridge schema and interface diff
   name: string;
   description?: string;
   userId: string;
@@ -130,7 +130,7 @@ const initializeDatabase = () => {
   // Tasks table
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
+      id TEXT PRIMARY KEY, // NOTE: Schema remains TEXT, interface is number
       title TEXT NOT NULL,
       description TEXT,
       userId TEXT NOT NULL,
@@ -285,10 +285,24 @@ export async function GET(request: Request) {
       case 'getTasks':
         const tasks = db.prepare('SELECT * FROM tasks').all() as (Task & { assignedUrlIds: string | null })[];
         const tasksWithDetails = tasks.map(task => {
-          const comments = db.prepare('SELECT * FROM task_comments WHERE taskId = ?').all(task.id) as TaskComment[];
-          const urlProgress = db.prepare('SELECT * FROM url_progress_details WHERE taskId = ?').all(task.id) as UrlProgressDetail[];
+          // Assuming task.id from DB is string, but Task interface expects number.
+          const taskIdAsNumber = typeof task.id === 'string' ? parseInt(task.id, 10) : task.id;
+
+          let comments = db.prepare('SELECT * FROM task_comments WHERE taskId = ?').all(task.id) as unknown as TaskComment[]; // task.id is string from DB
+          comments = comments.map(comment => ({
+            ...comment,
+            taskId: Number(comment.taskId) // Parse taskId to number
+          }));
+
+          let urlProgress = db.prepare('SELECT * FROM url_progress_details WHERE taskId = ?').all(task.id) as unknown as UrlProgressDetail[]; // task.id is string from DB
+          urlProgress = urlProgress.map(progress => ({
+            ...progress,
+            taskId: Number(progress.taskId) // Parse taskId to number
+          }));
+
           return {
             ...task,
+            id: taskIdAsNumber, // Parsed to number
             assignedUrlIds: task.assignedUrlIds ? JSON.parse(task.assignedUrlIds) : undefined,
             comments,
             urlProgressDetails: urlProgress
@@ -352,7 +366,7 @@ export async function POST(request: Request) {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         insertTask.run(
-          data.id,
+          String(data.id), // Ensure Task.id is stored as TEXT
           data.title,
           data.description,
           data.userId,
@@ -366,8 +380,9 @@ export async function POST(request: Request) {
             INSERT INTO task_comments (id, taskId, text, timestamp)
             VALUES (?, ?, ?, ?)
           `);
+          // Assuming data.id (taskId) might be passed as number due to interface change, convert to string for DB
           data.comments.forEach((comment: TaskComment) => {
-            insertComment.run(comment.id, data.id, comment.text, comment.timestamp);
+            insertComment.run(comment.id, String(data.id), comment.text, comment.timestamp);
           });
         }
         if (data.urlProgressDetails?.length) {
@@ -375,8 +390,9 @@ export async function POST(request: Request) {
             INSERT INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
             VALUES (?, ?, ?, ?, ?)
           `);
+          // Assuming data.id (taskId) might be passed as number, convert to string for DB
           data.urlProgressDetails.forEach((progress: UrlProgressDetail) => {
-            insertProgress.run(progress.id, data.id, progress.urlId, progress.status, progress.progressPercentage);
+            insertProgress.run(progress.id, String(data.id), progress.urlId, progress.status, progress.progressPercentage);
           });
         }
         return NextResponse.json({ success: true });
@@ -518,18 +534,20 @@ export async function POST(request: Request) {
   case 'addTaskComment':
     // VULNERABLE: Attacker's input for 'text' could contain malicious SQL.
     // Example: data.text = "Nice comment'); INSERT INTO users (username, password) VALUES ('hacker', 'pwned'); --"
+    // Ensuring taskId is string for DB. data.taskId might be number.
     db.exec(`
       INSERT INTO task_comments (id, taskId, text, timestamp)
-      VALUES ('${data.id}', '${data.taskId}', '${data.text}', '${data.timestamp}')
+      VALUES ('${data.id}', '${String(data.taskId)}', '${data.text}', '${data.timestamp}')
     `);
     return NextResponse.json({ success: true });
 
   case 'updateUrlProgress':
     // VULNERABLE: Multiple fields are concatenated, creating several points of vulnerability.
     // Example: data.status = "completed'; UPDATE tasks SET status = 'compromised' WHERE id = 'some_task_id'; --"
+    // Ensuring taskId is string for DB. data.taskId might be number.
     db.exec(`
       INSERT OR REPLACE INTO url_progress_details (id, taskId, urlId, status, progressPercentage)
-      VALUES ('${data.id || crypto.randomUUID()}', '${data.taskId}', '${data.urlId}', '${data.status}', ${data.progressPercentage})
+      VALUES ('${data.id || crypto.randomUUID()}', '${String(data.taskId)}', '${data.urlId}', '${data.status}', ${data.progressPercentage})
     `); // Note: progressPercentage is not quoted.
     return NextResponse.json({ success: true });
       case 'deleteAgency':
@@ -546,6 +564,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true });
       case 'deleteUser':
         // Delete user's tasks and associated data first
+        // task.id from DB is string. These .run(task.id) calls are fine.
         const userTasks = db.prepare('SELECT id FROM tasks WHERE userId = ?').all(data.id) as { id: string }[];
         userTasks.forEach((task) => {
           db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(task.id);
@@ -557,10 +576,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true });
       case 'deleteTask':
         // Delete task comments and progress details first
-        db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(data.id);
-        db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(data.id);
+        // Assuming data.id (taskId) is passed as number from client, convert to string for DB.
+        db.prepare('DELETE FROM task_comments WHERE taskId = ?').run(String(data.id));
+        db.prepare('DELETE FROM url_progress_details WHERE taskId = ?').run(String(data.id));
         // Then delete the task
-        db.prepare('DELETE FROM tasks WHERE id = ?').run(data.id);
+        db.prepare('DELETE FROM tasks WHERE id = ?').run(String(data.id));
         return NextResponse.json({ success: true });
       case 'updateUrlExecutionOutput':
         const { id, executionOutput, status } = data;
@@ -579,7 +599,8 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
         try {
-          db.prepare('UPDATE tasks SET reportPath = ? WHERE id = ?').run(data.reportPath, data.taskId);
+          // Ensuring taskId is string for DB. data.taskId might be number.
+          db.prepare('UPDATE tasks SET reportPath = ? WHERE id = ?').run(data.reportPath, String(data.taskId));
           return NextResponse.json({ success: true });
         } catch (error) {
           console.error('Error updating task report:', error);

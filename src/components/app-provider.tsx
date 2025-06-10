@@ -33,10 +33,10 @@ interface AppContextType {
   deleteUser: (userId: string) => Promise<void>;
   tasks: Task[];
   assignTask: (taskData: Omit<Task, 'id' | 'status' | 'comments' | 'urlProgressDetails'>) => Promise<void>;
-  deleteTask: (taskId: string) => Promise<void>;
-  updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
-  updateUrlProgress: (taskId: string, urlId: string, newStatus: UrlStatus, newProgressPercentage?: number) => Promise<void>;
-  addTaskComment: (taskId: string, commentText: string) => Promise<void>;
+  deleteTask: (taskId: number) => Promise<void>;
+  updateTaskStatus: (taskId: number, status: TaskStatus) => Promise<void>;
+  updateUrlProgress: (taskId: number, urlId: string, newStatus: UrlStatus, newProgressPercentage?: number) => Promise<void>;
+  addTaskComment: (taskId: number, commentText: string) => Promise<void>;
   getUrlsForAgency: (agencyId: string) => UrlItem[];
   getTasksForUser: (userId: string) => Task[];
   login: (userId: string) => boolean;
@@ -190,13 +190,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const assignTask = async (taskData: Omit<Task, 'id' | 'status' | 'comments' | 'urlProgressDetails'>) => {
     try {
+      // Generate new numeric ID
+      let maxId = 0;
+      tasks.forEach(task => {
+        const numericId = Number(task.id); // Convert task.id to number
+        if (!isNaN(numericId) && numericId > maxId) {
+          maxId = numericId;
+        }
+      });
+      const newTaskId = maxId + 1;
+
       const newTask: Task = {
         ...taskData,
-        id: uuidv4(),
+        id: newTaskId, // Assign the new numeric ID
         status: 'pending',
         comments: [],
         urlProgressDetails: []
       };
+      // db.addTask expects a Task object where id is a number.
+      // The API layer (api/db/route.ts) will handle converting this number to a string if needed for DB insertion.
       await db.addTask(newTask);
       setTasks(prev => [...prev, newTask]);
       toast({ title: 'Task assigned successfully' });
@@ -210,11 +222,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
+  const updateTaskStatus = async (taskId: number, status: TaskStatus) => {
     try {
-      await db.updateTask(taskId, { status });
+      await db.updateTask(taskId, { status }); // db.updateTask now expects number
       setTasks(prev => prev.map(task => 
-        task.id === taskId ? { ...task, status } : task
+        task.id === taskId ? { ...task, status } : task // task.id is number, taskId is number
       ));
       toast({ title: 'Task status updated' });
     } catch (error) {
@@ -228,15 +240,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUrlProgress = async (
-    taskId: string,
+    taskId: number, // Changed to number
     urlId: string,
     newStatus: UrlStatus,
     newProgressPercentage?: number
   ) => {
     try {
-      await db.updateUrlProgress(taskId, urlId, newStatus, newProgressPercentage);
+      await db.updateUrlProgress(taskId, urlId, newStatus, newProgressPercentage); // db.updateUrlProgress now expects number
       setTasks(prev => prev.map(task => {
-        if (task.id !== taskId) return task;
+        if (task.id !== taskId) return task; // task.id is number, taskId is number
         const updatedProgress = task.urlProgressDetails?.map(progress =>
           progress.urlId === urlId
             ? { ...progress, status: newStatus, progressPercentage: newProgressPercentage }
@@ -255,17 +267,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addTaskComment = async (taskId: string, commentText: string) => {
+  const addTaskComment = async (taskId: number, commentText: string) => {
     try {
-      const comment: TaskComment = {
+      const comment: TaskComment = { // TaskComment.taskId is now number
         id: uuidv4(),
-        taskId,
+        taskId: taskId, // Assign number directly
         text: commentText,
         timestamp: Date.now()
       };
+      // db.addTaskComment expects taskId as number, and comment object where comment.taskId is number
       await db.addTaskComment(taskId, comment);
       setTasks(prev => prev.map(task =>
-        task.id === taskId
+        task.id === taskId // task.id is number, taskId is number
+          // Ensure the comment object added to the state also has taskId as a number
           ? { ...task, comments: [...(task.comments || []), comment] }
           : task
       ));
@@ -285,6 +299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const getTasksForUser = (userId: string) => {
+    // This comparison is fine, userId is string, task.userId is string
     return tasks.filter(task => task.userId === userId);
   };
 
@@ -362,10 +377,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const deleteTask = async (taskId: string) => {
+  const deleteTask = async (taskId: number) => {
     try {
-      await db.deleteTask(taskId);
-      setTasks(prev => prev.filter(task => task.id !== taskId));
+      await db.deleteTask(taskId); // db.deleteTask now expects number
+      setTasks(prev => prev.filter(task => task.id !== taskId)); // task.id is number, taskId is number
       toast({ title: 'Task deleted successfully' });
     } catch (error) {
       console.error('Error deleting task:', error);

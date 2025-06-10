@@ -26,6 +26,10 @@ export default function AssignTaskPage() {
   const [selectedUrlIds, setSelectedUrlIds] = useState<string[]>([]);
   const router = useRouter();
 
+  // Explicitly type Task here for clarity, though it's inferred from useAppContext
+  // const { users, agencies, urls, assignTask, tasks: allTasks, deleteTask }: { tasks: Task[] /* ... other types */ } = useAppContext();
+
+
   if (status === "loading") return <div>Loading...</div>;
   if (status === "unauthenticated") {
     router.replace("/login");
@@ -73,13 +77,13 @@ export default function AssignTaskPage() {
     );
   };
 
-  const handleDeleteTask = async (taskId: string) => {
+  const handleDeleteTask = async (taskId: number) => { // Changed taskId to number
     if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
-      await deleteTask(taskId);
+      await deleteTask(taskId); // deleteTask from context now expects number
     }
   };
 
-  const assignedTasks = allTasks; // Display all tasks for admin overview
+  const assignedTasks = allTasks; // allTasks are Task[], so task.id is number
 
   return (
     <div className="space-y-6">
@@ -199,6 +203,7 @@ export default function AssignTaskPage() {
                   } else {
                     assignedItemsContent = `URLs: ${task.urlProgressDetails?.length || 0}`;
                   }
+                  // task.id is number, key prop expects string or number.
                   return (
                     <Card key={task.id} className="shadow-sm">
                       <CardHeader>
@@ -212,7 +217,7 @@ export default function AssignTaskPage() {
                           <Button
                             variant="destructive"
                             size="icon"
-                            onClick={() => handleDeleteTask(task.id)}
+                            onClick={() => handleDeleteTask(task.id)} // task.id is number
                             className="h-8 w-8 flex-shrink-0"
                           >
                             <Trash2 className="h-4 w-4" />

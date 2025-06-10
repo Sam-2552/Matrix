@@ -59,9 +59,10 @@ export const addTask = async (task: Task): Promise<void> => {
   });
 };
 
-export const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
+export const updateTask = async (taskId: number, updates: Partial<Task>): Promise<void> => {
   // Get the current task data first
   const tasks = await getTasks();
+  // t.id from getTasks() is already a number
   const currentTask = tasks.find(t => t.id === taskId);
   
   if (!currentTask) {
@@ -72,7 +73,7 @@ export const updateTask = async (taskId: string, updates: Partial<Task>): Promis
   const updatedTask = {
     ...currentTask,
     ...updates,
-    id: taskId // Ensure ID is preserved
+    id: taskId // taskId is number, consistent with Task.id
   };
 
   await fetch('/api/db', {
@@ -108,16 +109,18 @@ export async function updateUrlStatus(urlId: string, status: UrlStatus, pythonCo
   return response.json();
 }
 
-export const addTaskComment = async (taskId: string, comment: TaskComment): Promise<void> => {
+export const addTaskComment = async (taskId: number, comment: TaskComment): Promise<void> => {
   await fetch('/api/db', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'addTaskComment', data: { ...comment, taskId } })
+    // API expects taskId in the 'data' object to be a string for DB operations.
+    // comment.taskId is number (from TaskComment interface).
+    body: JSON.stringify({ action: 'addTaskComment', data: { ...comment, taskId: String(comment.taskId) } })
   });
 };
 
 export const updateUrlProgress = async (
-  taskId: string,
+  taskId: number, // Changed to number
   urlId: string,
   status: UrlStatus,
   progressPercentage?: number
@@ -127,7 +130,8 @@ export const updateUrlProgress = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'updateUrlProgress',
-      data: { taskId, urlId, status, progressPercentage }
+      // API expects taskId as string in the body for now
+      data: { taskId: String(taskId), urlId, status, progressPercentage }
     })
   });
 };
@@ -156,11 +160,12 @@ export const deleteUser = async (userId: string): Promise<void> => {
   });
 };
 
-export const deleteTask = async (taskId: string): Promise<void> => {
+export const deleteTask = async (taskId: number): Promise<void> => {
   await fetch('/api/db', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'deleteTask', data: { id: taskId } })
+    // API expects taskId as string in the body data for now
+    body: JSON.stringify({ action: 'deleteTask', data: { id: String(taskId) } })
   });
 };
 
