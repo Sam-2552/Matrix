@@ -130,7 +130,7 @@ const initializeDatabase = () => {
   // Tasks table
   db.exec(`
     CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY, // NOTE: Schema remains TEXT, interface is number
+      id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT,
       userId TEXT NOT NULL,
