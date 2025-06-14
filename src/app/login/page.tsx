@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useAppContext } from "@/components/app-provider";
+import Link from "next/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -74,9 +75,14 @@ export default function LoginPage() {
           />
         </div>
         <button type="submit" className="w-full bg-primary text-white py-2 rounded font-semibold hover:bg-primary/90">Login</button>
-        <p className="text-sm text-center mt-2">
-          Don't have an account? <a href="/register" className="text-primary underline">Register</a>
-        </p>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm text-center">
+            Don't have an account? <Link href="/register" className="text-primary hover:underline">Register</Link>
+          </p>
+          <p className="text-sm text-center">
+            <Link href="/forgot-password" className="text-primary hover:underline">Forgot Password?</Link>
+          </p>
+        </div>
       </form>
     </div>
   );
