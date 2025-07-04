@@ -1,0 +1,130 @@
+{
+  "global_text_replacements": {
+    "{{WAVE_NUMBER}}": "30",
+    "{{CLIENT_NAME_FULL}}": "NM Livestock Board",
+    "{{AGENCY_ABBREVIATION}}": "LB",
+    "{{DATE_OF_SITE_AUDIT}}": "May 2025",
+    "{{DATE_OF_REPORT_TO_CLIENT}}": "June 2025",
+    "{{NUMBER_OF_URLS_SUMMARY}}": "6",
+    "{{ACCESSIBLE_URLS_SUMMARY}}": "6",
+    "{{URLS_WITH_PAY_PORTAL_SUMMARY}}": "5",
+    "{{URLS_WITHOUT_PAY_PORTAL_SUMMARY}}": "1",
+    "{{COMPLAINT_URLS_SUMMARY}}":"5",
+    "{{NON_COMPLAINT_URLS_SUMMARY}}":"5",
+    "{{NEED_CLARIFICATION_FROM_AGENCY}}":"5",
+    "{{COMPLIANT_STATUS_SUMMARY}}": "Compliant"
+  },
+  "sections": {
+    
+    "detailed_report_table": {
+      "render": true,
+      "placeholder": "{{DETAILED_REPORT_TABLE}}",
+      "data": {
+        "agency_name": "LB",
+        "scope_total_urls": 6,
+        "overall_compliant_status": "Compliant",
+        "urls": [
+          { "site_serial": 1, "url_details": "http://example-lb.com/site1", "date_of_site_visit": "May 2025", "has_pay_portal": "N", "is_pci_compliant": "N/A", "date_reported_to_dfa": "", "notes_observations": "No payment portal observed." },
+          { "site_serial": 2, "url_details": "http://example-lb.com/paysite2", "date_of_site_visit": "May 2025", "has_pay_portal": "Y", "is_pci_compliant": "Y", "date_reported_to_dfa": "", "notes_observations": "Payment via PCI Certified Processor." },
+          { "site_serial": 3, "url_details": "PLEASE_ADD_URL_FOR_SITE_3_HERE", "date_of_site_visit": "May 2025", "has_pay_portal": "Y", "is_pci_compliant": "Y", "date_reported_to_dfa": "", "notes_observations": "Notes for Site 3" },
+          { "site_serial": 4, "url_details": "PLEASE_ADD_URL_FOR_SITE_4_HERE", "date_of_site_visit": "May 2025", "has_pay_portal": "Y", "is_pci_compliant": "Y", "date_reported_to_dfa": "", "notes_observations": "Notes for Site 4" },
+          { "site_serial": 5, "url_details": "PLEASE_ADD_URL_FOR_SITE_5_HERE", "date_of_site_visit": "May 2025", "has_pay_portal": "Y", "is_pci_compliant": "Y", "date_reported_to_dfa": "", "notes_observations": "Notes for Site 5" },
+          { "site_serial": 6, "url_details": "PLEASE_ADD_URL_FOR_SITE_6_HERE", "date_of_site_visit": "May 2025", "has_pay_portal": "Y", "is_pci_compliant": "Y", "date_reported_to_dfa": "", "notes_observations": "Notes for Site 6" }
+        ]
+      }
+    },
+    "pci_certified_sites": {
+      "render": true,
+      "placeholder": "{{PCI_CERTIFIED_SITES_DETAILS}}",
+      "data": {
+        "title_text_template": "URL(s) with payment option ({count}) - PCI Certified – Details below:",
+        "sites": [
+          {
+            "site_number_display": "2",
+            "url": "http://example-lb.com/paysite2",
+            "screenshots": [
+              { "description": "Step 1: User logs in.", "image_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png" },
+              { "description": "Step 2: User navigates to payment page.", "image_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png" },
+              { "description": "Step 3: Payment form is displayed via PCI certified processor.", "image_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png" }
+            ],
+            "conclusion_intro": "Conclusion:",
+            "conclusion_text": "Payment is redirected to a PCI DSS certified payment processor.",
+            "action_status": "NO ACTION IS REQUIRED; SITE IS PCI-COMPLIANT."
+          }
+        ]
+      }
+    },
+    "clarification_needed_sites": {
+      "render": true,
+      "placeholder": "{{CLARIFICATION_NEEDED_SITES_DETAILS}}",
+      "data": {
+        "title_text_template": "URL(s) with Payment Option ({count}) – To be clarified by the Agency:",
+        "contact_person_name": "Ravi Pandey",
+        "contact_person_email": "rpandey@securin.io",
+        "sites": [
+          {
+            "site_number_display": "1",
+            "site_main_url": "http://agency-main-url.gov",
+            "agency_abbreviation": "LB",
+            "scenarios": [
+              {
+                "scenario_label": "Scenario 1: Links to Third-Party Payment",
+                "steps": [
+                  { "description": "Navigating from main site to the feature.", "image_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png" },
+                  { "description": "User is on third-party site 'thirdparty.example.com' with payment option.", "image_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png" }
+                ],
+                "third_party_url_in_question": "thirdparty.example.com",
+                "action_required_intro": "ACTION REQUIRED:",
+                "action_text_template": "The URL {site_main_url} links to “{third_party_url_in_question}” for payments. This site was not in scope for {agency_abbreviation}.\nPlease clarify with {contact_person_name} ({contact_person_email}):\nSITE NUMBER: {site_number_display}\nSITE URL: {site_main_url}\na. Is “{third_party_url_in_question}” owned/managed by {agency_abbreviation}?\nIf “Yes”, provide relationship details.\nIf “No”, provide details (e.g., convenience link). This site will be considered out of scope."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "access_error_sites": {
+      "render": true,
+      "placeholder": "{{ACCESS_ERROR_SITES_DETAILS}}",
+      "data": {
+        "title_text_template": "URLs with Access Errors ({count}) – ACTION REQUIRED:",
+        "sites": [
+          {
+            "site_number_display": "2",
+            "url": "http://error.example.com/brokenpage",
+            "screenshot_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png",
+            "action_required_intro": "Action Required from the Agency:",
+            "error_description": "Error 404 - Not Found",
+            "action_points_prompt": "Please address the reason for the error message by selecting the checkbox and provide the required information as applicable.",
+            "action_points": [
+              "Incorrect URL (please provide the correct URL for future audit waves)?",
+              "External user access is restricted (will not audit in future waves)?",
+              "Other (please describe)?"
+            ]
+          }
+        ]
+      }
+    },
+    "Login_error_sites": {
+      "render": true,
+      "placeholder": "{{LOGIN_ERROR_SITES_DETAILS}}",
+      "data": {
+        "title_text_template": "URLs with Login Errors ({count}) – ACTION REQUIRED:",
+        "sites": [
+          {
+            "site_number_display": "2",
+            "url": "http://error.example.com/brokenpage",
+            "screenshot_path": "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\TRY-4\\image_1.png",
+            "action_required_intro": "Action Required from the Agency:",
+            "error_description":  "Invalid credentials",
+            "action_points_prompt": "Please address the reason for the error message by selecting the checkbox and provide the required information as applicable.",
+            "action_points": [
+              "Incorrect URL (please provide the correct URL for future audit waves)?",
+              "External user access is restricted (will not audit in future waves)?",
+              "Other (please describe)?"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
