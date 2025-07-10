@@ -579,8 +579,8 @@ def generate_report(template_path, json_path, output_path):
 from docx.oxml.ns import qn
 
 if __name__ == "__main__":
-    template_file = "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\PCI_Audit_Report_Generator_v1\\template.docx" # Ensure this path is correct
-    json_data_file = "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\PCI_Audit_Report_Generator_v1\\data.json"  # Ensure this path is correct
-    output_file = "D:\\PCI-URL-AUDIT-REPORT-GENERATOR\\PCI_Audit_Report_Generator_v1\\Generated_Report.docx"
+    template_file = "C:\\Users\\Harshini_S\\Documents\\GitHub\\Matrix\\template.docx" # Ensure this path is correct
+    json_data_file = "C:\\Users\\Harshini_S\\Documents\\GitHub\\Matrix\\data.json"  # Ensure this path is correct
+    output_file = "C:\\Users\\Harshini_S\\Documents\\GitHub\\Matrix\\Generated_Report.docx"
 
     generate_report(template_file, json_data_file, output_file)
