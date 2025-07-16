@@ -63,11 +63,49 @@ def load_json_data(json_path):
         return json.load(f)
 
 # From your code.py
-def replace_text_in_paragraph(paragraph, old_text, new_text): #
-    if old_text in paragraph.text: # Checks if the placeholder exists in the combined text of the paragraph
-        for run in paragraph.runs: # Iterates through individual runs
-            if old_text in run.text: # Checks if the ENTIRE placeholder is in THIS specific run's text
-                run.text = run.text.replace(old_text, str(new_text)) # Replaces if found in this run
+def replace_text_in_paragraph(paragraph, old_text, new_text):
+    """Replaces text in a paragraph, handling cases where the text might be split across runs."""
+    if old_text in paragraph.text:
+        # Store initial runs since we'll be modifying them
+        initial_runs = list(paragraph.runs)
+        
+        # Find the runs containing parts of old_text
+        start_run_index = None
+        end_run_index = None
+        accumulated_text = ""
+        
+        for i, run in enumerate(initial_runs):
+            accumulated_text += run.text
+            if old_text in accumulated_text:
+                end_run_index = i
+                # Find start by working backwards
+                temp_text = ""
+                for j in range(i, -1, -1):
+                    temp_text = initial_runs[j].text + temp_text
+                    if old_text in temp_text:
+                        start_run_index = j
+                        break
+                break
+        
+        if start_run_index is not None and end_run_index is not None:
+            # Get the text before and after the replacement in the affected runs
+            full_text = "".join(run.text for run in initial_runs[start_run_index:end_run_index + 1])
+            start_pos = full_text.find(old_text)
+            end_pos = start_pos + len(old_text)
+            
+            before_text = full_text[:start_pos]
+            after_text = full_text[end_pos:]
+            
+            # Replace the content in the first run
+            initial_runs[start_run_index].text = before_text + str(new_text) + after_text
+            
+            # Remove the other runs that were part of the placeholder
+            for i in range(start_run_index + 1, end_run_index + 1):
+                initial_runs[i].text = ""
+            
+            # Remove bold for date values
+            if old_text in ["{{DATE_OF_SITE_AUDIT}}", "{{DATE_OF_REPORT_TO_CLIENT}}"]:
+                initial_runs[start_run_index].bold = False
 
 def replace_text_in_shapes(doc, replacements):
     """Replaces text placeholders inside shapes in the document."""
@@ -77,6 +115,9 @@ def replace_text_in_shapes(doc, replacements):
             for key, value in replacements.items():
                 if key in text:
                     shape.text = text.replace(key, str(value))
+                    # Remove bold for date values
+                    if key in ["{{DATE_OF_SITE_AUDIT}}", "{{DATE_OF_REPORT_TO_CLIENT}}"]:
+                        shape.bold = False
 
 def replace_global_placeholders(doc, replacements):
     """Replaces global text placeholders throughout the document."""
@@ -132,6 +173,27 @@ def add_border_to_paragraph(paragraph):
     
     pPr.append(pBdr)
 
+def add_border_to_run(run):
+    """Add border to a specific run within a paragraph"""
+    rPr = run._r.get_or_add_rPr()
+    bdr = OxmlElement('w:bdr')
+    bdr.set(qn('w:val'), 'single')  # single line border
+    bdr.set(qn('w:sz'), '8')  # border width
+    bdr.set(qn('w:space'), '6')  # space between border and text
+    bdr.set(qn('w:color'), '000000')  # black color
+    rPr.append(bdr)
+
+def create_site_number_para(placeholder_para, site_number):
+    """Creates a paragraph with bordered site number"""
+    site_num_para = placeholder_para.insert_paragraph_before()
+    site_text = f"SITE # {site_number}"
+    run = site_num_para.add_run(site_text)
+    set_run_style(run, 'Roboto', 12)
+    add_border_to_run(run)
+    site_num_para.paragraph_format.space_before = Pt(6)
+    site_num_para.paragraph_format.space_after = Pt(6)
+    return site_num_para
+
 # --- Section Handler Functions ---
 
 def handle_detailed_report_table(doc, placeholder_para, section_config):
@@ -159,22 +221,22 @@ def handle_detailed_report_table(doc, placeholder_para, section_config):
     before = f"Agency Name: "
     after = f"\t\t\tScope: "
     between = f"\t\t\tCompliant Status: "
-    # Add styled runs
+    # Add styled runs with bold
     run = para.add_run(before)
-    set_run_style(run, 'Roboto', 12)
+    set_run_style(run, 'Roboto', 12, bold=True)
     run2 = para.add_run(agency_name)
-    set_run_style(run2, 'Roboto', 12, color='E36C09')
+    set_run_style(run2, 'Roboto', 12, color='E36C09', bold=True)
     run3 = para.add_run(after)
-    set_run_style(run3, 'Roboto', 12)
+    set_run_style(run3, 'Roboto', 12, bold=True)
     run4 = para.add_run(scope_urls)
-    set_run_style(run4, 'Roboto', 12, color='0070C0')
+    set_run_style(run4, 'Roboto', 12, color='0000FF', bold=True)
     run5 = para.add_run(between)
-    set_run_style(run5, 'Roboto', 12)
+    set_run_style(run5, 'Roboto', 12, bold=True)
     run6 = para.add_run(compliant_status)
     if compliant_status.strip().lower() == 'compliant':
-        set_run_style(run6, 'Roboto', 12, color='006050')
+        set_run_style(run6, 'Roboto', 12, color='006050', bold=True)
     else:
-        set_run_style(run6, 'Roboto', 12)
+        set_run_style(run6, 'Roboto', 12, bold=True)
     para.alignment = WD_ALIGN_PARAGRAPH.LEFT
     set_cell_background(merged_cell_agency, 'f2dcdb')
 
@@ -256,10 +318,13 @@ def _insert_pci_certified_content(placeholder_para, section_data, doc):
     title_text = data.get("title_text_template", "URL(s) with Payment Option ({count}) – PCI Certified – NO ACTION REQUIRED:").format(count=num_sites)
     heading_para = placeholder_para.insert_paragraph_before()
     run = heading_para.add_run(title_text)
-    set_run_style(run, 'Roboto', 12, color='0070C0', underline=True)
+    set_run_style(run, 'Roboto', 12, color='0000FF', bold=True, underline=True)
 
     for site in data.get("sites", []):
-        # URL line first
+        # Site number with border
+        create_site_number_para(placeholder_para, site.get('site_number_display', ''))
+
+        # URL line next
         url_para = placeholder_para.insert_paragraph_before()
         url_val = site['url']
         url_label = f"URL: "
@@ -271,13 +336,6 @@ def _insert_pci_certified_content(placeholder_para, section_data, doc):
             run_url = url_para.add_run(url_val)
             set_run_style(run_url, 'Roboto', 12, color='0000FF')
 
-        # Add site number without border
-        site_num_para = placeholder_para.insert_paragraph_before()
-        run = site_num_para.add_run(f"SITE # {site.get('site_number_display', '')}")
-        set_run_style(run, 'Roboto', 12)
-        site_num_para.paragraph_format.space_before = Pt(6)
-        site_num_para.paragraph_format.space_after = Pt(6)
-
         for screenshot in site.get("screenshots", []):
             desc_para = placeholder_para.insert_paragraph_before(screenshot['description'])
             for run in desc_para.runs:
@@ -288,15 +346,31 @@ def _insert_pci_certified_content(placeholder_para, section_data, doc):
                 img_p.add_run().add_picture(screenshot['image_path'], width=Inches(6.0))
             else:
                 img_p.add_run(f"[Image not found: {screenshot['image_path']}]")
-        concl_intro_para = placeholder_para.insert_paragraph_before(site.get('conclusion_intro', "Conclusion:"))
-        for run in concl_intro_para.runs:
-            set_run_style(run, 'Roboto', 12)
-        concl_text_para = placeholder_para.insert_paragraph_before(site['conclusion_text'])
-        for run in concl_text_para.runs:
-            set_run_style(run, 'Roboto', 12)
-        action_status_para = placeholder_para.insert_paragraph_before(site['action_status'])
-        for run in action_status_para.runs:
-            set_run_style(run, 'Roboto', 12)
+        
+        # Create a single paragraph for the entire conclusion section
+        concl_para = placeholder_para.insert_paragraph_before()
+        
+        # Add conclusion intro
+        concl_intro = site.get('conclusion_intro', "Conclusion:")
+        run_intro = concl_para.add_run(concl_intro + "\n")
+        set_run_style(run_intro, 'Roboto', 12)
+        
+        # Add conclusion text
+        concl_text = site['conclusion_text'] + "\n\n"
+        run_text = concl_para.add_run(concl_text)
+        set_run_style(run_text, 'Roboto', 12)
+        
+        # Add action status in the same paragraph
+        action_status = site['action_status']
+        run_status = concl_para.add_run(action_status)
+        set_run_style(run_status, 'Roboto', 12)
+        
+        # Add border to the entire conclusion paragraph
+        add_border_to_paragraph(concl_para)
+        
+        # Add page break to prevent conclusion from splitting
+        pb_para = placeholder_para.insert_paragraph_before('')
+        pb_para.add_run().add_break(WD_BREAK.PAGE)
 
 def handle_pci_certified_sites_section(doc, placeholder_para, section_config):
     if not (section_config and section_config.get("render") and section_config.get("data")):
@@ -317,10 +391,13 @@ def _insert_clarification_needed_content(placeholder_para, section_data, doc):
     title_text = data.get("title_text_template", "URL(s) with Payment Option ({count}) – To be clarified by the Agency:").format(count=num_sites)
     heading_para = placeholder_para.insert_paragraph_before()
     run = heading_para.add_run(title_text)
-    set_run_style(run, 'Roboto', 12, color='0070C0', underline=True)
+    set_run_style(run, 'Roboto', 12, color='0000FF', bold=True, underline=True)
 
     for site in data.get("sites", []):
-        # URL line first
+        # Site number with border
+        create_site_number_para(placeholder_para, site.get('site_number_display', ''))
+
+        # URL line next
         url_para = placeholder_para.insert_paragraph_before()
         url_val = site.get('site_main_url', '')
         url_label = f"URL: "
@@ -332,17 +409,10 @@ def _insert_clarification_needed_content(placeholder_para, section_data, doc):
             run_url = url_para.add_run(url_val)
             set_run_style(run_url, 'Roboto', 12, color='0000FF')
 
-        # Add site number without border
-        site_num_para = placeholder_para.insert_paragraph_before()
-        run = site_num_para.add_run(f"SITE # {site.get('site_number_display', '')}")
-        set_run_style(run, 'Roboto', 12)
-        site_num_para.paragraph_format.space_before = Pt(6)
-        site_num_para.paragraph_format.space_after = Pt(6)
-
         for scenario in site.get("scenarios", []):
             scenario_para = placeholder_para.insert_paragraph_before(scenario.get('scenario_label', 'Scenario:'))
             for run in scenario_para.runs:
-                set_run_style(run, 'Roboto', 12)
+                set_run_style(run, 'Roboto', 12, bold=True)
             for step in scenario.get("steps", []):
                 desc_para = placeholder_para.insert_paragraph_before(step['description'])
                 for run in desc_para.runs:
@@ -356,23 +426,41 @@ def _insert_clarification_needed_content(placeholder_para, section_data, doc):
             # Add ACTION REQUIRED text without border
             action_intro_para = placeholder_para.insert_paragraph_before(scenario.get("action_required_intro", "ACTION REQUIRED:"))
             for run in action_intro_para.runs:
-                set_run_style(run, 'Roboto', 12)
+                set_run_style(run, 'Roboto', 12, bold=True)
             
-            # Add the content directly without border
-            content = (
-                f'The URL {site.get("site_main_url", "")} links to "{scenario.get("third_party_url_in_question", "")}" for payments. '
-                f'This site was not in scope for {site.get("agency_abbreviation", "")}. '
-                f'Please clarify with {data.get("contact_person_name", "")} ({data.get("contact_person_email", "")}): '
-                f'SITE NUMBER: {site.get("site_number_display", "")} '
-                f'SITE URL: {site.get("site_main_url", "")} '
-                f'a. Is "{scenario.get("third_party_url_in_question", "")}" owned/managed by {site.get("agency_abbreviation", "")}? '
+            # Get the template and format it with the data
+            template = scenario.get("action_text_template", (
+                'The URL {site_main_url} links to "{third_party_url_in_question}" for payments. '
+                'This site was not in scope for {agency_abbreviation}. '
+                'Please clarify with {contact_person_name} ({contact_person_email}): '
+                'SITE NUMBER: {site_number_display} '
+                'SITE URL: {site_main_url} '
+                'a. Is "{third_party_url_in_question}" owned/managed by {agency_abbreviation}? '
                 'If "Yes", provide relationship details. '
                 'If "No", provide details (e.g., convenience link). This site will be considered out of scope.'
+            ))
+            
+            # Format the template with the data
+            content = template.format(
+                site_main_url=site.get("site_main_url", ""),
+                third_party_url_in_question=scenario.get("third_party_url_in_question", ""),
+                agency_abbreviation=site.get("agency_abbreviation", ""),
+                contact_person_name=data.get("contact_person_name", ""),
+                contact_person_email=data.get("contact_person_email", ""),
+                site_number_display=site.get("site_number_display", "")
             )
             
+            # Create paragraph and preserve newlines
             content_para = placeholder_para.insert_paragraph_before()
-            run = content_para.add_run(content)
-            set_run_style(run, 'Roboto', 12)
+            # Set left alignment explicitly
+            content_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            # Split content by newlines and add each part
+            parts = content.split('\n')
+            for i, part in enumerate(parts):
+                if i > 0:  # Add newline before all parts except the first
+                    content_para.add_run('\n')
+                run = content_para.add_run(part)
+                set_run_style(run, 'Roboto', 12)
 
 def handle_clarification_needed_sites_section(doc, placeholder_para, section_config):
     """Handles the 'clarification needed sites' section."""
@@ -398,10 +486,13 @@ def handle_access_error_sites_section(doc, placeholder_para, section_config):
     title_text = data.get("title_text_template", "URLs with Access Errors ({count}) – ACTION REQUIRED:").format(count=num_sites)
     heading_para = placeholder_para.insert_paragraph_before()
     run = heading_para.add_run(title_text)
-    set_run_style(run, 'Roboto', 12, color='0070C0', underline=True)
+    set_run_style(run, 'Roboto', 12, color='0000FF', bold=True, underline=True)
 
     for site in data.get("sites", []):
-        # URL line
+        # Site number with border
+        create_site_number_para(placeholder_para, site.get('site_number_display', ''))
+
+        # URL line next
         url_para = placeholder_para.insert_paragraph_before()
         url_val = site.get('url', '')
         url_label = f"URL: "
@@ -412,13 +503,6 @@ def handle_access_error_sites_section(doc, placeholder_para, section_config):
         else:
             run_url = url_para.add_run(url_val)
             set_run_style(run_url, 'Roboto', 12, color='0000FF')
-        
-        # Add site number without border
-        site_num_para = placeholder_para.insert_paragraph_before()
-        run = site_num_para.add_run(f"SITE # {site.get('site_number_display', '')}")
-        set_run_style(run, 'Roboto', 12)
-        site_num_para.paragraph_format.space_before = Pt(6)
-        site_num_para.paragraph_format.space_after = Pt(6)
 
         # Add screenshot first
         img_p = placeholder_para.insert_paragraph_before()
@@ -431,7 +515,7 @@ def handle_access_error_sites_section(doc, placeholder_para, section_config):
         # Then add ACTION REQUIRED text and content
         action_intro_para = placeholder_para.insert_paragraph_before(site.get('action_required_intro', 'ACTION REQUIRED:'))
         for run in action_intro_para.runs:
-            set_run_style(run, 'Roboto', 12)
+            set_run_style(run, 'Roboto', 12, bold=True)
         
         error_desc_para = placeholder_para.insert_paragraph_before(site.get('error_description', ''))
         for run in error_desc_para.runs:
@@ -462,10 +546,13 @@ def handle_login_error_sites_section(doc, placeholder_para, section_config):
     title_text = data.get("title_text_template", "URLs with Login Errors ({count}) – ACTION REQUIRED:").format(count=num_sites)
     heading_para = placeholder_para.insert_paragraph_before()
     run = heading_para.add_run(title_text)
-    set_run_style(run, 'Roboto', 12, color='0070C0', underline=True)
+    set_run_style(run, 'Roboto', 12, color='0000FF', bold=True, underline=True)
 
     for site in data.get("sites", []):
-        # URL line
+        # Site number with border
+        create_site_number_para(placeholder_para, site.get('site_number_display', ''))
+
+        # URL line next
         url_para = placeholder_para.insert_paragraph_before()
         url_val = site.get('url', '')
         url_label = f"URL: "
@@ -476,13 +563,6 @@ def handle_login_error_sites_section(doc, placeholder_para, section_config):
         else:
             run_url = url_para.add_run(url_val)
             set_run_style(run_url, 'Roboto', 12, color='0000FF')
-        
-        # Add site number without border
-        site_num_para = placeholder_para.insert_paragraph_before()
-        run = site_num_para.add_run(f"SITE # {site.get('site_number_display', '')}")
-        set_run_style(run, 'Roboto', 12)
-        site_num_para.paragraph_format.space_before = Pt(6)
-        site_num_para.paragraph_format.space_after = Pt(6)
 
         # Add screenshot first
         img_p = placeholder_para.insert_paragraph_before()
@@ -495,7 +575,7 @@ def handle_login_error_sites_section(doc, placeholder_para, section_config):
         # Then add ACTION REQUIRED text and content
         action_intro_para = placeholder_para.insert_paragraph_before(site.get('action_required_intro', 'ACTION REQUIRED:'))
         for run in action_intro_para.runs:
-            set_run_style(run, 'Roboto', 12)
+            set_run_style(run, 'Roboto', 12, bold=True)
         
         error_desc_para = placeholder_para.insert_paragraph_before(site.get('error_description', ''))
         for run in error_desc_para.runs:
@@ -533,8 +613,15 @@ def generate_report(template_path, json_path, output_path):
         return
 
     if "global_text_replacements" in data:
-        replace_global_placeholders(doc, data["global_text_replacements"])
+        replacements = data["global_text_replacements"]
+        if "{{OBSERVATIONS}}" in replacements and isinstance(replacements.get("{{OBSERVATIONS}}"), list):
+            formatted_observations = "\n".join(f"• {item}" for item in replacements["{{OBSERVATIONS}}"])
+            replacements["{{OBSERVATIONS}}"] = formatted_observations
+        replace_global_placeholders(doc, replacements)
+    
 
+
+    
     sections_map = {
         "detailed_report_table": handle_detailed_report_table,
         "pci_certified_sites": handle_pci_certified_sites_section,

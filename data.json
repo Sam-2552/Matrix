@@ -12,7 +12,12 @@
     "{{COMPLAINT_URLS_SUMMARY}}":"5",
     "{{NON_COMPLAINT_URLS_SUMMARY}}":"5",
     "{{NEED_CLARIFICATION_FROM_AGENCY}}":"5",
-    "{{COMPLIANT_STATUS_SUMMARY}}": "Compliant"
+    "{{COMPLIANT_STATUS_SUMMARY}}": "Compliant",
+    "{{OBSERVATIONS}}": [
+      "All payment portals are PCI DSS compliant",
+      "No security vulnerabilities found in payment processing",
+      "Third-party payment integrations are properly configured"
+    ]
   },
   "sections": {
     
