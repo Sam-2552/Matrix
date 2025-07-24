@@ -305,9 +305,6 @@ def handle_detailed_report_table(doc, placeholder_para, section_config):
         placeholder_para._p.addprevious(table._tbl)
     
     if placeholder_para:
-        # Insert page break paragraph *before* the original placeholder paragraph
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
         # Remove original placeholder paragraph
         remove_paragraph_element(placeholder_para._element)
 
@@ -368,9 +365,8 @@ def _insert_pci_certified_content(placeholder_para, section_data, doc):
         # Add border to the entire conclusion paragraph
         add_border_to_paragraph(concl_para)
         
-        # Add page break to prevent conclusion from splitting
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
+        # Remove original placeholder paragraph
+        remove_paragraph_element(placeholder_para._element)
 
 def handle_pci_certified_sites_section(doc, placeholder_para, section_config):
     if not (section_config and section_config.get("render") and section_config.get("data")):
@@ -380,8 +376,7 @@ def handle_pci_certified_sites_section(doc, placeholder_para, section_config):
     _insert_pci_certified_content(placeholder_para, section_config["data"], doc)
 
     if placeholder_para:
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
+        # Remove original placeholder paragraph
         remove_paragraph_element(placeholder_para._element)
 
 def _insert_clarification_needed_content(placeholder_para, section_data, doc):
@@ -471,8 +466,7 @@ def handle_clarification_needed_sites_section(doc, placeholder_para, section_con
     _insert_clarification_needed_content(placeholder_para, section_config["data"], doc)
 
     if placeholder_para:
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
+        # Remove original placeholder paragraph
         remove_paragraph_element(placeholder_para._element)
 
 def handle_access_error_sites_section(doc, placeholder_para, section_config):
@@ -531,8 +525,7 @@ def handle_access_error_sites_section(doc, placeholder_para, section_config):
                 set_run_style(run, 'Roboto', 12)
 
     if placeholder_para:
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
+        # Remove original placeholder paragraph
         remove_paragraph_element(placeholder_para._element)
 
 def handle_login_error_sites_section(doc, placeholder_para, section_config):
@@ -591,8 +584,7 @@ def handle_login_error_sites_section(doc, placeholder_para, section_config):
                 set_run_style(run, 'Roboto', 12)
 
     if placeholder_para:
-        pb_para = placeholder_para.insert_paragraph_before('')
-        pb_para.add_run().add_break(WD_BREAK.PAGE)
+        # Remove original placeholder paragraph
         remove_paragraph_element(placeholder_para._element)
 
 # --- Main Generator ---
@@ -631,6 +623,7 @@ def generate_report(template_path, json_path, output_path):
     }
 
     if "sections" in data:
+        first_section = True
         for section_key, section_config in data["sections"].items():
             placeholder_text = section_config.get("placeholder")
             if not placeholder_text:
@@ -644,7 +637,12 @@ def generate_report(template_path, json_path, output_path):
                 if handler_func:
                     print(f"Processing section: {section_key} with placeholder: '{placeholder_text}'")
                     try:
+                        # Insert page break before section, except for the first section
+                        if not first_section:
+                            pb_para = placeholder_para.insert_paragraph_before()
+                            pb_para.add_run().add_break(WD_BREAK.PAGE)
                         handler_func(doc, placeholder_para, section_config)
+                        first_section = False
                     except Exception as e_handler:
                         print(f"Error processing section '{section_key}': {e_handler}")
                         # Optionally, decide if placeholder should be removed or an error message inserted
