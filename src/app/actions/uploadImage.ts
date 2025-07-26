@@ -1,8 +1,8 @@
 
 "use server";
 
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase'; // Assuming you have initialized storage
+import { gfs } from '@/lib/mongodb';
+import { Readable } from 'stream';
 
 export async function uploadImage(formData: FormData) {
   const file = formData.get('file') as File;
@@ -12,11 +12,25 @@ export async function uploadImage(formData: FormData) {
   }
 
   try {
-    const storageRef = ref(storage, `report-images/${Date.now()}-${file.name}`);
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const readableStream = Readable.from(buffer);
 
-    return { success: true, url: downloadURL };
+    const writestream = gfs.createWriteStream({
+      filename: file.name,
+      content_type: file.type,
+    });
+
+    readableStream.pipe(writestream);
+
+    return new Promise((resolve, reject) => {
+      writestream.on('close', (file) => {
+        resolve({ success: true, url: `/api/images/${file._id}` });
+      });
+      writestream.on('error', (err) => {
+        console.error('Error uploading file:', err);
+        reject({ success: false, error: err.message });
+      });
+    });
   } catch (error: any) {
     console.error('Error uploading file:', error);
     return { success: false, error: error.message };

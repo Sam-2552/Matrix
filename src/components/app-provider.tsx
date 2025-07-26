@@ -3,8 +3,8 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { collection, doc, addDoc, updateDoc, onSnapshot, setDoc, getDocs, query, where, writeBatch, getDoc, orderBy, deleteDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { clientPromise } from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 import type { Agency, UrlItem, AppUser, Task, UserRole, TaskStatus, TaskComment, UrlStatus, UrlProgressDetail, Report, ReportStatus, Wave, ReportCategory, WaveStatus, WaveAssignment } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
@@ -66,62 +66,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const currentRole = currentUser?.role || null;
 
   useEffect(() => {
-    setIsLoading(true);
-    const usersCollectionRef = collection(db, 'users');
-
-    const initializeData = async () => {
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
-        const initialSnapshot = await getDocs(usersCollectionRef);
-        if (initialSnapshot.empty && initialUsersSeed.length > 0) {
-          console.log("Users collection is empty, seeding initial users...");
-          const batch = writeBatch(db);
-          initialUsersSeed.forEach(user => {
-            const userRef = doc(db, "users", user.id);
-            batch.set(userRef, user);
-          });
-          await batch.commit();
-        }
+        const [
+          usersRes,
+          agenciesRes,
+          urlsRes,
+          tasksRes,
+          reportsRes,
+          wavesRes,
+          reportCategoriesRes,
+        ] = await Promise.all([
+          fetch('/api/users'),
+          fetch('/api/agencies'),
+          fetch('/api/urls'),
+          fetch('/api/tasks'),
+          fetch('/api/reports'),
+          fetch('/api/waves'),
+          fetch('/api/reportCategories'),
+        ]);
+
+        const usersData = await usersRes.json();
+        setUsers(usersData.map((u: any) => ({ ...u, id: u._id.toString() })));
+
+        const agenciesData = await agenciesRes.json();
+        setAgencies(agenciesData.map((a: any) => ({ ...a, id: a._id.toString() })));
+
+        const urlsData = await urlsRes.json();
+        setUrls(urlsData.map((u: any) => ({ ...u, id: u._id.toString() })));
+
+        const tasksData = await tasksRes.json();
+        setTasks(tasksData.map((t: any) => ({ ...t, id: t._id.toString() })));
+
+        const reportsData = await reportsRes.json();
+        setReports(reportsData.map((r: any) => ({ ...r, id: r._id.toString() })));
+
+        const wavesData = await wavesRes.json();
+        setWaves(wavesData.map((w: any) => ({ ...w, id: w._id.toString() })));
+
+        const reportCategoriesData = await reportCategoriesRes.json();
+        setReportCategories(reportCategoriesData.map((rc: any) => ({ ...rc, id: rc._id.toString() })));
+
       } catch (error) {
-        console.error("Error during user initialization/seeding: ", error);
-        toast({ title: "Initialization Error", description: "Could not seed initial users.", variant: "destructive" });
+        console.error("Error fetching data: ", error);
+        toast({ title: "Error Fetching Data", description: "Could not fetch data from the database.", variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
     };
-    
-    initializeData();
 
-    const createUnsubscriber = (collectionName: string, setter: React.Dispatch<React.SetStateAction<any[]>>, orderField?: string, orderDirection: 'asc' | 'desc' = 'desc') => {
-      let q = query(collection(db, collectionName));
-      if (orderField) {
-        q = query(q, orderBy(orderField, orderDirection));
-      }
-      return onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-        setter(data);
-      }, (error) => {
-        console.error(`Error fetching ${collectionName}: `, error);
-        toast({ title: `Error fetching ${collectionName}`, description: error.message, variant: "destructive" });
-      });
-    };
-
-    const unsubscribeUsers = createUnsubscriber('users', setUsers);
-    const unsubscribeAgencies = createUnsubscriber('agencies', setAgencies, 'name', 'asc');
-    const unsubscribeUrls = createUnsubscriber('urls', setUrls);
-    const unsubscribeTasks = createUnsubscriber('tasks', setTasks);
-    const unsubscribeReports = createUnsubscriber('reports', setReports, 'updatedAt');
-    const unsubscribeWaves = createUnsubscriber('waves', setWaves, 'createdAt');
-    const unsubscribeReportCategories = createUnsubscriber('reportCategories', setReportCategories, 'name', 'asc');
-
-    return () => {
-      unsubscribeUsers();
-      unsubscribeAgencies();
-      unsubscribeUrls();
-      unsubscribeTasks();
-      unsubscribeReports();
-      unsubscribeWaves();
-      unsubscribeReportCategories();
-    };
+    fetchData();
   }, [toast]);
 
 
@@ -163,7 +158,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addAgency = async (name: string) => {
     try {
-      await addDoc(collection(db, 'agencies'), { name });
+      await fetch('/api/agencies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name }),
+      });
       toast({ title: "Agency Added", description: `Agency "${name}" has been added.` });
     } catch (error: any) {
       console.error("Error adding agency: ", error);
@@ -173,16 +174,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addWave = async (name: string, number: number, description: string): Promise<string | undefined> => {
     try {
-      const newWave = {
-        name,
-        number,
-        description,
-        createdAt: new Date().toISOString(),
-        status: 'draft' as WaveStatus,
-      };
-      const docRef = await addDoc(collection(db, 'waves'), newWave);
+      const response = await fetch('/api/waves', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, number, description }),
+      });
+      const result = await response.json();
       toast({ title: "Wave Added", description: `Wave "${name}" has been added as a draft.` });
-      return docRef.id;
+      return result.insertedId.toString();
     } catch (error: any) {
       console.error("Error adding wave: ", error);
       toast({ title: "Error Adding Wave", description: error.message, variant: "destructive" });
@@ -191,18 +192,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateWaveStatus = async (waveId: string, status: WaveStatus) => {
     try {
-        const waveRef = doc(db, 'waves', waveId);
-        await updateDoc(waveRef, { status });
-        toast({ title: "Wave Updated", description: `Wave status changed to "${status}".` });
+      await fetch(`/api/waves/${waveId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+      toast({ title: "Wave Updated", description: `Wave status changed to "${status}".` });
     } catch (error: any) {
-        console.error("Error updating wave status: ", error);
-        toast({ title: "Error Updating Wave", description: error.message, variant: "destructive" });
+      console.error("Error updating wave status: ", error);
+      toast({ title: "Error Updating Wave", description: error.message, variant: "destructive" });
     }
   };
 
   const addReportCategory = async (name: string) => {
     try {
-      await addDoc(collection(db, 'reportCategories'), { name });
+      await fetch('/api/reportCategories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name }),
+      });
       toast({ title: "Category Added", description: `Category "${name}" has been added.` });
     } catch (error: any) {
       console.error("Error adding category: ", error);
@@ -212,18 +224,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteReportCategory = async (categoryId: string) => {
     try {
-        await deleteDoc(doc(db, 'reportCategories', categoryId));
-        toast({ title: "Category Deleted", description: "The report category has been deleted." });
+      await fetch(`/api/reportCategories/${categoryId}`, {
+        method: 'DELETE',
+      });
+      toast({ title: "Category Deleted", description: "The report category has been deleted." });
     } catch (error: any) {
-        console.error("Error deleting category: ", error);
-        toast({ title: "Error Deleting Category", description: error.message, variant: "destructive" });
+      console.error("Error deleting category: ", error);
+      toast({ title: "Error Deleting Category", description: error.message, variant: "destructive" });
     }
   };
 
 
   const addUrl = async (link: string, agencyId: string | null) => {
     try {
-      await addDoc(collection(db, 'urls'), { link, agencyId });
+      await fetch('/api/urls', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ link, agencyId }),
+      });
       toast({ title: "URL Added", description: `URL "${link}" has been added.` });
     } catch (error: any) {
       console.error("Error adding URL: ", error);
@@ -233,14 +253,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addUser = async (name: string, username: string, password: string, role: UserRole) => {
     try {
-      const userQuery = query(collection(db, "users"), where("username", "==", username));
-      const querySnapshot = await getDocs(userQuery);
-      if (!querySnapshot.empty) {
-          toast({ title: "User Exists", description: `User with username "${username}" already exists.`, variant: "destructive" });
-          return;
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, username, password, role }),
+      });
+      if (response.status === 409) {
+        toast({ title: "User Exists", description: `User with username "${username}" already exists.`, variant: "destructive" });
+        return;
       }
-      const newUser: Omit<AppUser, 'id'> = { name, username, password, role };
-      await addDoc(collection(db, 'users'), newUser);
       toast({ title: "User Added", description: `User "${name}" (${role}) has been added.` });
     } catch (error: any) {
       console.error("Error adding user: ", error);
@@ -250,85 +273,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const saveWaveAssignments = async (waveId: string, waveDescription: string, assignments: Record<string, WaveAssignment>) => {
     try {
-        const batch = writeBatch(db);
-        const wave = waves.find(w => w.id === waveId);
-        if (!wave) throw new Error("Wave not found");
-
-        if (wave.description !== waveDescription) {
-            const waveRef = doc(db, 'waves', waveId);
-            batch.update(waveRef, { description: waveDescription });
-        }
-
-        const userIdsWithAssignments = Object.keys(assignments);
-        const existingTasksForWave = tasks.filter(t => t.waveId === waveId);
-
-        for (const userId of userIdsWithAssignments) {
-            const userAssignment = assignments[userId];
-            if (!userAssignment) continue;
-            
-            const allAssignedUrlsForUser = new Set<string>(userAssignment.assignedUrlIds);
-            userAssignment.assignedAgencyIds.forEach(agencyId => {
-                urls.filter(u => u.agencyId === agencyId).forEach(u => allAssignedUrlsForUser.add(u.id));
-            });
-            const allUrlIds = Array.from(allAssignedUrlsForUser);
-
-            const existingTask = existingTasksForWave.find(t => t.userId === userId);
-
-            if (existingTask) {
-                const taskRef = doc(db, 'tasks', existingTask.id);
-                const newProgressDetails = allUrlIds.map(urlId => {
-                    return existingTask.urlProgressDetails?.find(d => d.urlId === urlId) || { urlId, status: 'pending', progressPercentage: 0 };
-                });
-
-                batch.update(taskRef, {
-                    title: `Wave ${wave.number}: ${wave.name}`,
-                    description: waveDescription,
-                    assignedAgencyIds: userAssignment.assignedAgencyIds,
-                    assignedUrlIds: userAssignment.assignedUrlIds,
-                    urlProgressDetails: newProgressDetails,
-                });
-
-            } else {
-                const taskRef = doc(collection(db, 'tasks'));
-                const urlProgressDetails = allUrlIds.map(urlId => ({
-                    urlId, status: 'pending' as UrlStatus, progressPercentage: 0
-                }));
-
-                const newTask: Omit<Task, 'id'> = {
-                    title: `Wave ${wave.number}: ${wave.name}`,
-                    description: waveDescription,
-                    userId,
-                    waveId,
-                    assignedAgencyIds: userAssignment.assignedAgencyIds,
-                    assignedUrlIds: userAssignment.assignedUrlIds,
-                    urlProgressDetails,
-                    status: 'pending',
-                    comments: [],
-                };
-                batch.set(taskRef, newTask);
-            }
-        }
-        
-        const userIdsWithoutAssignments = existingTasksForWave
-            .filter(t => !userIdsWithAssignments.includes(t.userId))
-            .map(t => t.id);
-
-        for (const taskIdToDelete of userIdsWithoutAssignments) {
-            batch.delete(doc(db, 'tasks', taskIdToDelete));
-        }
-
-        await batch.commit();
-        toast({ title: "Assignments Saved", description: "All assignments for this wave have been successfully saved." });
+      await fetch(`/api/waves/${waveId}/assignments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ waveDescription, assignments }),
+      });
+      toast({ title: "Assignments Saved", description: "All assignments for this wave have been successfully saved." });
     } catch (error: any) {
-        console.error("Error saving wave assignments: ", error);
-        toast({ title: "Error Saving Assignments", description: error.message, variant: "destructive" });
+      console.error("Error saving wave assignments: ", error);
+      toast({ title: "Error Saving Assignments", description: error.message, variant: "destructive" });
     }
   };
 
   const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
     try {
-      const taskRef = doc(db, 'tasks', taskId);
-      await updateDoc(taskRef, { status });
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
       toast({ title: "Task Updated", description: `Task status changed to "${status}".` });
     } catch (error: any) {
       console.error("Error updating task status: ", error);
@@ -337,77 +304,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUrlProgress = async (taskId: string, urlIdToUpdate: string, newStatus: UrlStatus, newProgressPercentage?: number) => {
-    const taskRef = doc(db, 'tasks', taskId);
     try {
-        const taskSnap = await getDoc(taskRef);
-        if (!taskSnap.exists()) {
-            throw new Error("Task not found");
-        }
-
-        const taskData = taskSnap.data() as Task;
-
-        let allUrlsForTask = new Set<string>(taskData.assignedUrlIds || []);
-        (taskData.assignedAgencyIds || []).forEach(agencyId => {
-            urls.filter(u => u.agencyId === agencyId).forEach(u => allUrlsForTask.add(u.id));
-        });
-
-        let currentProgressDetails = taskData.urlProgressDetails || [];
-        
-        // Ensure all assigned URLs have a progress detail entry
-        allUrlsForTask.forEach(urlId => {
-            if (!currentProgressDetails.some(detail => detail.urlId === urlId)) {
-                currentProgressDetails.push({ urlId: urlId, status: 'pending', progressPercentage: 0 });
-            }
-        });
-
-        let detailToUpdate = currentProgressDetails.find(detail => detail.urlId === urlIdToUpdate);
-
-        if (!detailToUpdate) {
-            // This case should ideally not be hit if the above logic is sound, but as a fallback:
-            detailToUpdate = { urlId: urlIdToUpdate, status: 'pending', progressPercentage: 0 };
-            currentProgressDetails.push(detailToUpdate);
-        }
-
-        // Update the specific URL's progress
-        detailToUpdate.status = newStatus;
-        if (newProgressPercentage !== undefined) {
-            detailToUpdate.progressPercentage = Math.max(0, Math.min(100, newProgressPercentage));
-        }
-        
-        // Auto-adjust progress based on status
-        if (newStatus === 'completed') detailToUpdate.progressPercentage = 100;
-        if (newStatus === 'pending') detailToUpdate.progressPercentage = 0;
-        if (newStatus === 'in-progress' && detailToUpdate.progressPercentage === 100) newStatus = 'completed';
-        if (newStatus === 'in-progress' && detailToUpdate.progressPercentage === 0) newStatus = 'pending';
-
-
-        // Recalculate overall task status
-        let overallStatus: TaskStatus = 'pending';
-        if (currentProgressDetails.length > 0) {
-            const allCompleted = currentProgressDetails.every(d => d.status === 'completed');
-            const anyInProgress = currentProgressDetails.some(d => d.status === 'in-progress');
-
-            if (allCompleted) {
-                overallStatus = 'completed';
-            } else if (anyInProgress) {
-                overallStatus = 'in-progress';
-            } else {
-                 // No items are 'in-progress'. If some are 'pending', the task is 'in-progress' overall.
-                 const anyPending = currentProgressDetails.some(d => d.status === 'pending');
-                 if(anyPending) {
-                     overallStatus = 'in-progress'
-                 }
-            }
-        }
-        
-        await updateDoc(taskRef, {
-            urlProgressDetails: currentProgressDetails,
-            status: overallStatus
-        });
-
+      await fetch(`/api/tasks/${taskId}/progress`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ urlIdToUpdate, newStatus, newProgressPercentage }),
+      });
     } catch (error: any) {
-        console.error("Error updating URL progress: ", error);
-        toast({ title: "Error Updating Progress", description: error.message, variant: "destructive" });
+      console.error("Error updating URL progress: ", error);
+      toast({ title: "Error Updating Progress", description: error.message, variant: "destructive" });
     }
   };
 
@@ -416,66 +323,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast({ title: "Error", description: "You must be viewing as a user to comment.", variant: "destructive" });
       return;
     }
-    const newComment: TaskComment = {
-      id: `comment-${Date.now()}`, 
-      text: commentText,
-      userName: currentUser.name,
-      date: new Date().toISOString(),
-    };
     try {
-      const taskRef = doc(db, 'tasks', taskId);
-      const taskSnap = await getDoc(taskRef);
-      if (taskSnap.exists()) {
-        const taskData = taskSnap.data() as Task;
-        const updatedComments = [...(taskData.comments || []), newComment];
-        await updateDoc(taskRef, { comments: updatedComments });
-        toast({ title: "Comment Added", description: "Your comment has been added to the task." });
-      } else {
-        toast({ title: "Error", description: "Task not found.", variant: "destructive" });
-      }
+      await fetch(`/api/tasks/${taskId}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commentText, userName: currentUser.name }),
+      });
+      toast({ title: "Comment Added", description: "Your comment has been added to the task." });
     } catch (error: any) {
       console.error("Error adding comment: ", error);
       toast({ title: "Error Adding Comment", description: error.message, variant: "destructive" });
     }
   };
 
- const saveReport = async (data: Partial<Report> & { agencyId: string; waveId: string; sections: any[] }) => {
+  const saveReport = async (data: Partial<Report> & { agencyId: string; waveId: string; sections: any[] }) => {
     if (!currentUser) {
-        toast({ title: "Authentication Error", description: "You must be logged in to save a report.", variant: "destructive" });
-        return;
+      toast({ title: "Authentication Error", description: "You must be logged in to save a report.", variant: "destructive" });
+      return;
     }
 
     const { id, agencyId, waveId, sections, status } = data;
 
     try {
-        if (id) { // Update existing report
-            const reportRef = doc(db, 'reports', id);
-            await updateDoc(reportRef, {
-                agencyId,
-                waveId,
-                sections,
-                status,
-                updatedAt: new Date().toISOString(),
-            });
-            toast({ title: "Report Updated", description: "Your changes have been saved successfully." });
-        } else { // Create new report
-            const newReport: Omit<Report, 'id'> = {
-                userId: currentUser.id,
-                agencyId,
-                waveId,
-                sections,
-                status: status || 'draft',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            };
-            await addDoc(collection(db, 'reports'), newReport);
-            toast({ title: "Report Saved", description: "Your report has been created successfully." });
-        }
+      if (id) { // Update existing report
+        await fetch(`/api/reports/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ agencyId, waveId, sections, status }),
+        });
+        toast({ title: "Report Updated", description: "Your changes have been saved successfully." });
+      } else { // Create new report
+        await fetch('/api/reports', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId: currentUser.id, agencyId, waveId, sections, status }),
+        });
+        toast({ title: "Report Saved", description: "Your report has been created successfully." });
+      }
     } catch (error: any) {
-        console.error("Error saving report: ", error);
-        toast({ title: "Error Saving Report", description: error.message, variant: "destructive" });
+      console.error("Error saving report: ", error);
+      toast({ title: "Error Saving Report", description: error.message, variant: "destructive" });
     }
-};
+  };
   
   const getUrlsForAgency = (agencyId: string) => {
     return urls.filter(url => url.agencyId === agencyId);
