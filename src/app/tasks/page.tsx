@@ -1,6 +1,7 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/components/app-provider';
 import { Button } from '@/components/ui/button';
@@ -10,158 +11,141 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
-import { FileText, MessageSquare, Send, Link2, Tags, CheckCircle, RefreshCw, Circle, Percent, Upload } from 'lucide-react';
-import type { TaskStatus, TaskComment, UrlItem, Task, UrlStatus, UrlProgressDetail } from '@/types';
+import { FileText, MessageSquare, Send, Link2, CheckCircle, RefreshCw, Circle, Waves, Briefcase } from 'lucide-react';
+import type { TaskStatus, TaskComment, UrlItem, Task, UrlStatus, Agency } from '@/types';
 import { format } from 'date-fns';
-import { useSession } from "next-auth/react";
-import { CommentEditor } from '@/components/comment-editor';
-import DOMPurify from 'dompurify';
-import { useToast } from "@/hooks/use-toast";
-import { Input } from '@/components/ui/input';
+
+interface GroupedUrls {
+  agency: Agency;
+  urls: UrlItem[];
+}
 
 export default function MyTasksPage() {
-  const { getTasksForUser, updateTaskStatus, addTaskComment, agencies, urls: allUrls, updateUrlProgress } = useAppContext();
-  const { data: session, status } = useSession();
-  const router = useRouter();
+  const { 
+    currentUser, 
+    getTasksForUser, 
+    updateTaskStatus, 
+    addTaskComment, 
+    agencies, 
+    urls: allUrls,
+    updateUrlProgress,
+    waves
+  } = useAppContext();
   const [commentTexts, setCommentTexts] = useState<Record<string, string>>({});
-  const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
-  const { toast } = useToast();
+  const router = useRouter();
 
-  if (status === "loading") return <div>Loading...</div>;
-  if (status === "unauthenticated") {
-    router.replace("/login");
-    return null;
-  }
-
-  if (!session?.user?.id) {
-    return <div>User not found</div>;
-  }
-
-  const userTasks = getTasksForUser(session.user.id); // task.id is number here
-
-  const handleOverallStatusChange = (taskId: number, status: TaskStatus) => { // taskId is number
-    const task = userTasks.find(t => t.id === taskId); // number === number
-    if (task && task.assignedItemType === 'agency') {
-      updateTaskStatus(taskId, status); // updateTaskStatus expects number
-      // Clear selected file when status changes
-      setSelectedFiles(prev => ({ ...prev, [taskId]: null })); // taskId (number) used as key, JS converts to string
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/login');
     }
-  };
+  }, [currentUser, router]);
 
-  const handleUrlStatusChange = (taskId: number, urlId: string, newStatus: UrlStatus) => { // taskId is number
-    updateUrlProgress(taskId, urlId, newStatus); // updateUrlProgress expects number for taskId
-  };
+  const userTasks = useMemo(() => currentUser ? getTasksForUser(currentUser.id) : [], [currentUser, getTasksForUser]);
 
-  const handleUrlProgressChange = (taskId: number, urlId: string, progress: number) => { // taskId is number
-    const task = userTasks.find(t => t.id === taskId); // number === number
-    const urlDetail = task?.urlProgressDetails?.find(upd => upd.urlId === urlId);
-    const currentStatus = urlDetail?.status || 'in_progress'; // Fixed status value
+  const getTaskItemsDetails = (task: Task): { assignedAgencies: Agency[], assignedUrls: UrlItem[], groupedUrls: GroupedUrls[], individualUrls: UrlItem[] } => {
+    const assignedAgencies = (task.assignedAgencyIds || [])
+      .map(id => agencies.find(a => a.id === id))
+      .filter((a): a is Agency => a !== undefined);
 
-    updateUrlProgress(taskId, urlId, progress === 100 ? 'completed' : currentStatus, progress); // updateUrlProgress expects number for taskId
-  };
-
-  const handleFileChange = (taskId: number, file: File | null) => { // taskId is number
-    setSelectedFiles(prev => ({ ...prev, [taskId]: file })); // taskId (number) used as key
-  };
-
-  const handleSubmitReport = async (taskId: number) => { // taskId is number
-    const file = selectedFiles[taskId]; // taskId (number) used as key
-    if (!file) {
-      toast({
-        title: "Error",
-        description: "Please select a file to upload",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    try {
-      const task = userTasks.find(t => t.id === taskId); // number === number
-      if (!task) {
-        throw new Error('Task not found');
-      }
-
-      // Get the first URL ID from the task's assigned URLs
-      let urlId: string | undefined;
-      if (task.assignedItemType === 'urls' && task.assignedUrlIds && task.assignedUrlIds.length > 0) {
-        urlId = task.assignedUrlIds[0];
-      } else if (task.assignedItemType === 'agency' && task.assignedAgencyId) {
-        const agencyUrls = allUrls.filter(u => u.agencyId === task.assignedAgencyId);
-        if (agencyUrls.length > 0) {
-          urlId = agencyUrls[0].id;
-        }
-      }
-
-      if (!urlId) {
-        throw new Error('No URLs found for this task');
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('urlId', urlId);
-
-      const response = await fetch('/api/upload-report', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload report');
-      }
-
-      toast({
-        title: "Success",
-        description: "Report submitted successfully",
-      });
-
-      // Clear the selected file after successful upload
-      setSelectedFiles(prev => ({ ...prev, [taskId]: null })); // taskId (number) used as key
-    } catch (error) {
-      console.error('Error uploading report:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to upload report",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handleAddComment = (taskId: number) => { // taskId is number
-    const text = commentTexts[taskId]; // taskId (number) used as key
-    if (text && text.trim()) {
-      addTaskComment(taskId, text.trim()); // addTaskComment expects number
-      setCommentTexts(prev => ({ ...prev, [taskId]: '' })); // taskId (number) used as key
-    }
-  };
-
-  const getTaskItemsDetails = (task: Task): { type: 'agency' | 'url', name: string, items: UrlItem[] | UrlProgressDetail[] } => {
-    if (task.assignedItemType === 'agency') {
-      const agency = agencies.find(a => a.id === task.assignedAgencyId);
-      const agencyUrls = allUrls.filter(u => u.agencyId === task.assignedAgencyId);
-      return { type: 'agency', name: agency?.name || 'Unknown Agency', items: agencyUrls };
-    }
+    const specificUrls = (task.assignedUrlIds || [])
+      .map(id => allUrls.find(u => u.id === id))
+      .filter((u): u is UrlItem => u !== undefined);
+      
+    const agencyUrls = assignedAgencies.flatMap(agency =>
+        allUrls.filter(u => u.agencyId === agency.id)
+    );
     
-    const taskUrlDetails = task.urlProgressDetails?.map(detail => {
-      const urlInfo = allUrls.find(u => u.id === detail.urlId);
-      return { ...detail, link: urlInfo?.link || 'Unknown URL' };
-    }) || [];
+    const combinedUrls = [...specificUrls, ...agencyUrls];
+    const uniqueUrls = Array.from(new Map(combinedUrls.map(u => [u.id, u])).values());
 
-    return { type: 'url', name: `${taskUrlDetails.length} URL(s)`, items: taskUrlDetails };
+    const groupedUrls: GroupedUrls[] = assignedAgencies.map(agency => ({
+      agency,
+      urls: allUrls.filter(u => u.agencyId === agency.id)
+    }));
+
+    const individualUrls = specificUrls;
+
+    return { assignedAgencies, assignedUrls: uniqueUrls, groupedUrls, individualUrls };
   };
+
+  if (!currentUser) {
+    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
+  }
+
+  const handleOverallStatusChange = (taskId: string, status: TaskStatus) => {
+    updateTaskStatus(taskId, status);
+  };
+
+  const handleUrlStatusChange = (taskId: string, urlId: string, newStatus: UrlStatus) => {
+    updateUrlProgress(taskId, urlId, newStatus);
+  };
+
+  const handleUrlProgressChange = (taskId: string, urlId: string, progress: number) => {
+    // Determine status based on progress, but let backend finalize it
+    const newStatus: UrlStatus = progress === 100 ? 'completed' : (progress > 0 ? 'in-progress' : 'pending');
+    updateUrlProgress(taskId, urlId, newStatus, progress);
+  };
+
+  const handleAddComment = (taskId: string) => {
+    const text = commentTexts[taskId];
+    if (text && text.trim()) {
+      addTaskComment(taskId, text.trim());
+      setCommentTexts(prev => ({ ...prev, [taskId]: '' }));
+    }
+  };
+  
+  const UrlProgressRow = ({ task, url }: { task: Task, url: UrlItem }) => {
+    const urlDetail = task.urlProgressDetails?.find(upd => upd.urlId === url.id) || { urlId: url.id, status: 'pending', progressPercentage: 0 };
+    const urlStatusColorClass = urlDetail.status === 'completed' ? 'text-green-600' : urlDetail.status === 'in-progress' ? 'text-blue-600' : 'text-orange-600';
+    
+    return (
+      <li key={url.id} className="p-2 rounded-md bg-muted/50">
+        <div className="space-y-2">
+          <a href={url.link} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary hover:underline truncate block font-medium" title={url.link}>
+            {url.link}
+          </a>
+          <div className="flex items-center space-x-2">
+            <Select 
+              value={urlDetail.status} 
+              onValueChange={(newStatus) => handleUrlStatusChange(task.id, url.id, newStatus as UrlStatus)}
+            >
+              <SelectTrigger className={`h-8 text-xs w-36 font-medium ${urlStatusColorClass} border-${urlStatusColorClass?.replace('text-', '')?.replace('-600', '-500')}`}>
+                <SelectValue placeholder="URL Status"/>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending"><Circle className="mr-1 h-3 w-3 text-orange-500 fill-orange-500"/>Pending</SelectItem>
+                <SelectItem value="in-progress"><RefreshCw className="mr-1 h-3 w-3 text-blue-500"/>In Progress</SelectItem>
+                <SelectItem value="completed"><CheckCircle className="mr-1 h-3 w-3 text-green-500"/>Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center space-x-2 flex-grow">
+                <Slider
+                  value={[urlDetail.progressPercentage]}
+                  onValueChange={(value) => handleUrlProgressChange(task.id, url.id, value[0])}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+                <span className="text-xs text-foreground font-medium w-12 text-right">{urlDetail.progressPercentage}%</span>
+              </div>
+          </div>
+        </div>
+      </li>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold tracking-tight flex items-center"><FileText className="mr-2 h-8 w-8 text-primary"/>My Tasks</h1>
-      <p className="text-muted-foreground">View your assigned tasks, update their status, and add comments.</p>
+      <p className="text-muted-foreground">View your assigned tasks from different waves, update their status, and add comments.</p>
 
       {userTasks.length > 0 ? (
         <ScrollArea className="h-[calc(100vh-18rem)] pr-4">
           <div className="space-y-6">
             {userTasks.map(task => {
-              const taskItemsDetails = getTaskItemsDetails(task);
-              const isUrlTask = task.assignedItemType === 'urls';
-              const isCompleted = task.status === 'completed';
+              const { assignedUrls, groupedUrls, individualUrls } = getTaskItemsDetails(task);
+              const wave = waves.find(w => w.id === task.waveId);
+              const statusColorClass = task.status === 'completed' ? 'text-green-600' : task.status === 'in-progress' ? 'text-blue-600' : 'text-orange-600';
 
               return (
                 <Card key={task.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -169,15 +153,16 @@ export default function MyTasksPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <CardTitle className="text-xl">{task.title}</CardTitle>
-                        <CardDescription>ID: {task.id}</CardDescription>
+                        {wave && (
+                           <CardDescription className="flex items-center gap-2 pt-1"><Waves className="h-4 w-4"/>Wave {wave.number}: {wave.name}</CardDescription>
+                        )}
                       </div>
-                      <div className="w-48"> {/* Increased width for clarity */}
-                        <Select 
+                      <div className="w-48">
+                         <Select 
                           value={task.status} 
                           onValueChange={(status) => handleOverallStatusChange(task.id, status as TaskStatus)}
-                          disabled={isUrlTask} // Disable overall status for URL tasks
                         >
-                          <SelectTrigger className={`h-9 text-xs ${task.status === 'completed' ? 'border-green-500 text-green-600' : task.status === 'in-progress' ? 'border-blue-500 text-blue-600' : 'border-orange-500 text-orange-600'}`}>
+                          <SelectTrigger className={`h-9 text-xs font-medium ${statusColorClass} border-${statusColorClass?.replace('text-', '')?.replace('-600', '-500')}`}>
                             <SelectValue placeholder="Status"/>
                           </SelectTrigger>
                           <SelectContent>
@@ -186,7 +171,7 @@ export default function MyTasksPage() {
                             <SelectItem value="completed"><CheckCircle className="mr-2 h-3 w-3 text-green-500"/>Completed</SelectItem>
                           </SelectContent>
                         </Select>
-                        {isUrlTask && <p className="text-xs text-muted-foreground mt-1 text-right">Overall status derived from URLs.</p>}
+                        <p className="text-xs text-muted-foreground mt-1 text-right">Overall task status.</p>
                       </div>
                     </div>
                   </CardHeader>
@@ -194,106 +179,72 @@ export default function MyTasksPage() {
                     {task.description && <p className="text-sm text-muted-foreground mb-3">{task.description}</p>}
                     
                     <div className="mb-3">
-                      <h4 className="font-semibold text-sm mb-1 flex items-center">
-                        {taskItemsDetails.type === 'agency' ? <Tags className="mr-1.5 h-4 w-4 text-primary"/> : <Link2 className="mr-1.5 h-4 w-4 text-primary"/>}
-                        Assigned: {taskItemsDetails.name}
+                      <h4 className="font-semibold text-sm mb-2 flex items-center">
+                        <Link2 className="mr-1.5 h-4 w-4 text-primary"/>
+                        Assigned URLs ({assignedUrls.length})
                       </h4>
                       
-                      {taskItemsDetails.items.length > 0 && (
-                        <ScrollArea className="h-auto max-h-60 border rounded-md p-2 text-sm">
-                           <ul className="space-y-3">
-                            {taskItemsDetails.items.map((item, index) => (
-                              <li key={isUrlTask ? (item as UrlProgressDetail).urlId : (item as UrlItem).id} className="p-2 rounded-md bg-muted/50">
-                                {isUrlTask ? (
-                                  (() => {
-                                    const urlDetail = item as UrlProgressDetail & { link: string }; // Cast for link access
-                                    return (
-                                      <div className="space-y-2">
-                                        <a href={urlDetail.link} target="_blank" rel="noopener noreferrer" className="text-foreground hover:text-primary hover:underline truncate block font-medium" title={urlDetail.link}>
-                                          {urlDetail.link}
-                                        </a>
-                                        <div className="flex items-center space-x-2">
-                                          <Select 
-                                            value={urlDetail.status} 
-                                            onValueChange={(newStatus) => handleUrlStatusChange(task.id, urlDetail.urlId, newStatus as UrlStatus)}
-                                          >
-                                            <SelectTrigger className={`h-8 text-xs w-36 ${urlDetail.status === 'completed' ? 'border-green-500 text-green-600' : urlDetail.status === 'in_progress' ? 'border-blue-500 text-blue-600' : 'border-orange-500 text-orange-600'}`}>
-                                              <SelectValue placeholder="URL Status"/>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="pending"><Circle className="mr-1 h-3 w-3 text-orange-500 fill-orange-500"/>Pending</SelectItem>
-                                              <SelectItem value="in-progress"><RefreshCw className="mr-1 h-3 w-3 text-blue-500"/>In Progress</SelectItem>
-                                              <SelectItem value="completed"><CheckCircle className="mr-1 h-3 w-3 text-green-500"/>Completed</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-                                          {urlDetail.status === 'in_progress' && (
-                                            <div className="flex items-center space-x-2 flex-grow">
-                                              <Slider
-                                                value={[urlDetail.progressPercentage ?? 0]}
-                                                onValueChange={(value) => handleUrlProgressChange(task.id, urlDetail.urlId, value[0])}
-                                                max={100}
-                                                step={1}
-                                                className="w-full"
-                                              />
-                                              <span className="text-xs text-foreground font-medium w-12 text-right">{urlDetail.progressPercentage ?? 0}%</span>
-                                            </div>
-                                          )}
-                                           {urlDetail.status === 'completed' && (
-                                              <span className="text-xs text-green-600 font-medium flex items-center"><CheckCircle className="mr-1 h-4 w-4"/>100%</span>
-                                           )}
-                                           {urlDetail.status === 'pending' && (
-                                               <span className="text-xs text-orange-600 font-medium flex items-center"><Circle className="mr-1 h-4 w-4 fill-current"/>0%</span>
-                                           )}
-                                        </div>
-                                      </div>
-                                    )
-                                  })()
-                                ) : (
-                                  <a href={(item as UrlItem).link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary hover:underline truncate block" title={(item as UrlItem).link}>
-                                    {(item as UrlItem).link}
-                                  </a>
-                                )}
-                              </li>
+                      {assignedUrls.length > 0 ? (
+                        <div className="h-auto max-h-[22rem] border rounded-md p-2 overflow-y-auto">
+                          <Accordion type="multiple" className="w-full space-y-2">
+                            {groupedUrls.map(({ agency, urls }) => (
+                              urls.length > 0 &&
+                              <AccordionItem value={agency.id} key={agency.id} className="border-none">
+                                <AccordionTrigger className="text-sm font-semibold hover:no-underline bg-muted/30 px-3 py-2 rounded-md">
+                                  <span className="flex items-center gap-2"><Briefcase className="h-4 w-4" />Agency: {agency.name} ({urls.length})</span>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-2">
+                                  <ul className="space-y-3 px-1">
+                                    {urls.map(url => <UrlProgressRow key={url.id} task={task} url={url} />)}
+                                  </ul>
+                                </AccordionContent>
+                              </AccordionItem>
                             ))}
-                          </ul>
-                        </ScrollArea>
+                            {individualUrls.length > 0 && (
+                               <AccordionItem value="individual" className="border-none" defaultChecked>
+                                <AccordionTrigger className="text-sm font-semibold hover:no-underline bg-muted/30 px-3 py-2 rounded-md">
+                                  <span className="flex items-center gap-2"><Link2 className="h-4 w-4" />Specifically Assigned URLs ({individualUrls.length})</span>
+                                </AccordionTrigger>
+                                <AccordionContent className="pt-2">
+                                  <ul className="space-y-3 px-1">
+                                    {individualUrls.map(url => <UrlProgressRow key={url.id} task={task} url={url} />)}
+                                  </ul>
+                                </AccordionContent>
+                              </AccordionItem>
+                            )}
+                          </Accordion>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground p-4 text-center">No URLs have been assigned to this task.</p>
                       )}
                     </div>
 
                     <Accordion type="single" collapsible className="w-full">
                       <AccordionItem value="comments">
                         <AccordionTrigger className="text-sm hover:no-underline">
-                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments?.length ?? 0})</span>
+                          <span className="flex items-center"><MessageSquare className="mr-2 h-4 w-4"/>Comments ({task.comments?.length || 0})</span>
                         </AccordionTrigger>
                         <AccordionContent className="pt-2">
-                          <ScrollArea className="h-40 mb-2 border rounded-md p-2">
+                           <div className="h-40 mb-2 border rounded-md p-2 overflow-y-auto">
                             {task.comments && task.comments.length > 0 ? (
                               <ul className="space-y-3">
                                 {task.comments.map((comment: TaskComment) => (
                                   <li key={comment.id} className="text-xs">
-                                    <p className="font-semibold text-foreground"><span className="text-muted-foreground font-normal">({format(new Date(comment.timestamp ?? 0), "PPpp")})</span>:</p>
-                                    <div 
-                                      className="text-muted-foreground prose prose-sm max-w-none prose-headings:my-2 prose-p:my-1 prose-a:text-primary prose-a:underline hover:prose-a:no-underline"
-                                      dangerouslySetInnerHTML={{ 
-                                        __html: DOMPurify.sanitize(comment.text, {
-                                          ALLOWED_TAGS: ['a', 'p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'code', 'pre', 'prompt', 'img'],
-                                            ALLOWED_ATTR: ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'class', 'style', 'onerror']
-                                          })
-                                      }}
-                                    />
+                                    <p className="font-semibold text-foreground">{comment.userName} <span className="text-muted-foreground font-normal">({format(new Date(comment.date), "PPpp")})</span>:</p>
+                                    <p className="text-muted-foreground whitespace-pre-wrap">{comment.text}</p>
                                   </li>
                                 ))}
                               </ul>
                             ) : (
                               <p className="text-xs text-muted-foreground text-center py-4">No comments yet.</p>
                             )}
-                          </ScrollArea>
+                          </div>
                           <div className="flex space-x-2">
                             <Textarea 
-                              placeholder="Add a comment" 
+                              placeholder="Add a comment..." 
                               value={commentTexts[task.id] || ''}
                               onChange={(e) => setCommentTexts(prev => ({ ...prev, [task.id]: e.target.value }))}
-                              className="text-xs min-h-[40px] font-mono"
+                              className="text-xs min-h-[40px]"
                               rows={2}
                             />
                             <Button size="sm" onClick={() => handleAddComment(task.id)} disabled={!commentTexts[task.id]?.trim()}>
@@ -304,32 +255,6 @@ export default function MyTasksPage() {
                       </AccordionItem>
                     </Accordion>
                   </CardContent>
-                  {isCompleted && task.assignedItemType === 'agency' && (
-                    <CardFooter className="border-t pt-4">
-                      <div className="w-full space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <Input
-                            type="file"
-                            onChange={(e) => handleFileChange(task.id, e.target.files?.[0] || null)}
-                            className="flex-1"
-                          />
-                          <Button 
-                            onClick={() => handleSubmitReport(task.id)}
-                            disabled={!selectedFiles[task.id]}
-                            className="flex items-center"
-                          >
-                            <Upload className="mr-2 h-4 w-4" />
-                            Submit Report
-                          </Button>
-                        </div>
-                        {selectedFiles[task.id] && (
-                          <p className="text-sm text-muted-foreground">
-                            Selected file: {selectedFiles[task.id]?.name}
-                          </p>
-                        )}
-                      </div>
-                    </CardFooter>
-                  )}
                 </Card>
               )
             })}

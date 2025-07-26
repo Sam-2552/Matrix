@@ -7,32 +7,28 @@ import { TaskProgressChart } from '@/components/charts/task-progress-chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Briefcase, Link2, Users, GanttChartSquare } from 'lucide-react';
 import Link from 'next/link';
-import { useSession } from "next-auth/react";
 
 export default function AdminDashboardPage() {
-  const { agencies, users, tasks, urls, currentRole, currentUser } = useAppContext();
-  const { data: session, status } = useSession();
+  const { tasks, agencies, urls, users, currentUser } = useAppContext();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "authenticated" && currentRole !== "admin") {
-      router.replace("/dashboard");
+    if (!currentUser) {
+      router.replace('/login');
+    } else if (currentUser.role !== 'admin') {
+      // If a non-admin somehow lands here, redirect them appropriately
+      router.replace('/dashboard'); 
     }
-  }, [status, currentRole, router]);
+  }, [currentUser, router]);
 
-  if (status === "loading" || !currentUser) return <div>Loading...</div>;
-  if (status === "unauthenticated") {
-    router.replace("/login");
-    return null;
-  }
-  if (currentRole !== "admin") {
-    return null;
+  if (!currentUser || currentUser.role !== 'admin') {
+    // Render loading or null while redirecting or if not authorized
+    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Welcome, {currentUser.name || currentUser.email || "Admin"}!</h1>
-      <p className="text-muted-foreground">Here's an overview of your system.</p>
+      <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="shadow-sm hover:shadow-md transition-shadow">
@@ -85,11 +81,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      <TaskProgressChart 
-        tasks={tasks} 
-        title="System Task Progress"
-        description="Overview of all tasks in the system"
-      />
+      <TaskProgressChart tasks={tasks} />
     </div>
   );
 }

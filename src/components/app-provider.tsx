@@ -1,21 +1,12 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { collection, doc, addDoc, updateDoc, onSnapshot, setDoc, getDocs, query, where, writeBatch, getDoc, orderBy, deleteDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import type { Agency, UrlItem, AppUser, Task, UserRole, TaskStatus, TaskComment, UrlStatus, UrlProgressDetail, Report, ReportStatus, Wave, ReportCategory, WaveStatus, WaveAssignment } from '@/types';
 import { useToast } from "@/hooks/use-toast";
-import type { Agency, UrlItem, AppUser, Task, UserRole, TaskStatus, TaskComment, UrlStatus, UrlProgressDetail } from '@/types';
-import * as db from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
-import { hash } from 'bcryptjs';
-import { useSession } from "next-auth/react";
-
-interface SessionUser {
-  id?: string;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
-  role?: string;
-}
 
 interface AppContextType {
   actualUser: AppUser | null;
@@ -23,23 +14,27 @@ interface AppContextType {
   currentRole: UserRole | null;
   agencies: Agency[];
   addAgency: (name: string) => Promise<void>;
-  deleteAgency: (agencyId: string) => Promise<void>;
   urls: UrlItem[];
   addUrl: (link: string, agencyId: string | null) => Promise<void>;
-  deleteUrl: (urlId: string) => Promise<void>;
-  updateUrlStatus: (urlId: string, status: UrlStatus, pythonCode?: string, executionOutput?: string) => Promise<void>;
   users: AppUser[];
-  addUser: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
-  deleteUser: (userId: string) => Promise<void>;
+  addUser: (name: string, username: string, password: string, role: UserRole) => Promise<void>;
   tasks: Task[];
-  assignTask: (taskData: Omit<Task, 'id' | 'status' | 'comments' | 'urlProgressDetails'>) => Promise<void>;
-  deleteTask: (taskId: number) => Promise<void>;
-  updateTaskStatus: (taskId: number, status: TaskStatus) => Promise<void>;
-  updateUrlProgress: (taskId: number, urlId: string, newStatus: UrlStatus, newProgressPercentage?: number) => Promise<void>;
-  addTaskComment: (taskId: number, commentText: string) => Promise<void>;
+  saveWaveAssignments: (waveId: string, waveDescription: string, assignments: Record<string, WaveAssignment>) => Promise<void>;
+  updateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
+  updateUrlProgress: (taskId: string, urlId: string, newStatus: UrlStatus, newProgressPercentage?: number) => Promise<void>;
+  addTaskComment: (taskId: string, commentText: string) => Promise<void>;
+  reports: Report[];
+  saveReport: (data: Partial<Report> & { agencyId: string; waveId: string; sections: any[] }) => Promise<void>;
+  waves: Wave[];
+  addWave: (name: string, number: number, description: string) => Promise<string | undefined>;
+  updateWaveStatus: (waveId: string, status: WaveStatus) => Promise<void>;
+  reportCategories: ReportCategory[];
+  addReportCategory: (name: string) => Promise<void>;
+  deleteReportCategory: (categoryId: string) => Promise<void>;
   getUrlsForAgency: (agencyId: string) => UrlItem[];
   getTasksForUser: (userId: string) => Task[];
-  login: (userId: string) => boolean;
+  getReportsForUser: (userId: string) => Report[];
+  login: (username: string, password: string) => boolean;
   logout: () => void;
   impersonateUser: (targetUserId: string) => void;
   isLoading: boolean;
@@ -47,400 +42,470 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const initialUsersSeed: AppUser[] = [
+  { id: 'admin1', name: 'Admin User', username: 'admin', password: 'password', role: 'admin' },
+  { id: 'user1', name: 'Regular User 1', username: 'user1', password: 'password', role: 'user' },
+  { id: 'user2', name: 'Regular User 2', username: 'user2', password: 'password', role: 'user' },
+];
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [actualUser, setActualUser] = useState<AppUser | null>(null);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(null);
+  
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [urls, setUrls] = useState<UrlItem[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [waves, setWaves] = useState<Wave[]>([]);
+  const [reportCategories, setReportCategories] = useState<ReportCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  
   const { toast } = useToast();
-  const { data: session, status } = useSession();
 
-  // Load initial data
+  const currentRole = currentUser?.role || null;
+
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [usersData, agenciesData, urlsData, tasksData] = await Promise.all([
-          db.getUsers(),
-          db.getAgencies(),
-          db.getUrls(),
-          db.getTasks()
-        ]);
+    setIsLoading(true);
+    const usersCollectionRef = collection(db, 'users');
 
-        // Ensure usersData is an array
-        setUsers(Array.isArray(usersData) ? usersData : []);
-        setAgencies(Array.isArray(agenciesData) ? agenciesData : []);
-        setUrls(Array.isArray(urlsData) ? urlsData : []);
-        setTasks(Array.isArray(tasksData) ? tasksData : []);
-        setIsLoading(false);
+    const initializeData = async () => {
+      try {
+        const initialSnapshot = await getDocs(usersCollectionRef);
+        if (initialSnapshot.empty && initialUsersSeed.length > 0) {
+          console.log("Users collection is empty, seeding initial users...");
+          const batch = writeBatch(db);
+          initialUsersSeed.forEach(user => {
+            const userRef = doc(db, "users", user.id);
+            batch.set(userRef, user);
+          });
+          await batch.commit();
+        }
       } catch (error) {
-        console.error('Error loading data:', error);
-        toast({
-          title: 'Error loading data',
-          description: 'Failed to load application data',
-          variant: 'destructive'
-        });
+        console.error("Error during user initialization/seeding: ", error);
+        toast({ title: "Initialization Error", description: "Could not seed initial users.", variant: "destructive" });
+      } finally {
         setIsLoading(false);
       }
     };
+    
+    initializeData();
 
-    loadData();
-  }, []);
-
-  // Sync session with user state
-  useEffect(() => {
-    if (status === "authenticated" && session?.user?.email) {
-      // If user data is not loaded yet, set role based on session email
-      if (!Array.isArray(users) || users.length === 0) {
-        const isAdmin = session.user.email === 'admin@example.com';
-        const role = isAdmin ? 'admin' : 'user';
-        setCurrentRole(role);
-        // Create a temporary user object
-        const tempUser: AppUser = {
-          id: 'temp',
-          name: session.user.name || 'User',
-          email: session.user.email,
-          role: role
-        };
-        setActualUser(tempUser);
-        setCurrentUser(tempUser);
-        return;
+    const createUnsubscriber = (collectionName: string, setter: React.Dispatch<React.SetStateAction<any[]>>, orderField?: string, orderDirection: 'asc' | 'desc' = 'desc') => {
+      let q = query(collection(db, collectionName));
+      if (orderField) {
+        q = query(q, orderBy(orderField, orderDirection));
       }
-
-      // Once user data is loaded, set the full user info
-      const user = users.find(u => u.email === session.user?.email);
-      if (user) {
-        console.log('Setting user role:', user.role);
-        setActualUser(user);
-        setCurrentUser(user);
-        setCurrentRole(user.role);
-      }
-    } else if (status === "unauthenticated") {
-      setActualUser(null);
-      setCurrentUser(null);
-      setCurrentRole(null);
-    }
-  }, [status, session, users]);
-
-  const addAgency = async (name: string) => {
-    try {
-      const newAgency: Agency = {
-        id: uuidv4(),
-        name
-      };
-      await db.addAgency(newAgency);
-      setAgencies(prev => [...prev, newAgency]);
-      toast({ title: 'Agency added successfully' });
-    } catch (error) {
-      console.error('Error adding agency:', error);
-      toast({
-        title: 'Error adding agency',
-        description: 'Failed to add new agency',
-        variant: 'destructive'
+      return onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setter(data);
+      }, (error) => {
+        console.error(`Error fetching ${collectionName}: `, error);
+        toast({ title: `Error fetching ${collectionName}`, description: error.message, variant: "destructive" });
       });
-    }
-  };
+    };
 
-  const addUrl = async (link: string, agencyId: string | null) => {
-    try {
-      const newUrl: UrlItem = {
-        id: uuidv4(),
-        link,
-        agencyId: agencyId || undefined,
-        status: 'pending'
-      };
-      await db.addUrl(newUrl);
-      setUrls(prev => [...prev, newUrl]);
-      toast({ title: 'URL added successfully' });
-    } catch (error) {
-      console.error('Error adding URL:', error);
-      toast({
-        title: 'Error adding URL',
-        description: 'Failed to add new URL',
-        variant: 'destructive'
-      });
-    }
-  };
+    const unsubscribeUsers = createUnsubscriber('users', setUsers);
+    const unsubscribeAgencies = createUnsubscriber('agencies', setAgencies, 'name', 'asc');
+    const unsubscribeUrls = createUnsubscriber('urls', setUrls);
+    const unsubscribeTasks = createUnsubscriber('tasks', setTasks);
+    const unsubscribeReports = createUnsubscriber('reports', setReports, 'updatedAt');
+    const unsubscribeWaves = createUnsubscriber('waves', setWaves, 'createdAt');
+    const unsubscribeReportCategories = createUnsubscriber('reportCategories', setReportCategories, 'name', 'asc');
 
-  const addUser = async (name: string, email: string, password: string, role: UserRole) => {
-    try {
-      const passwordHash = await hash(password, 10);
-      const newUser = {
-        id: uuidv4(),
-        name,
-        email,
-        passwordHash,
-        role
-      };
-      await db.addUser(newUser);
-      setUsers(prev => [...prev, newUser]);
-      toast({ title: 'User added successfully' });
-    } catch (error) {
-      console.error('Error adding user:', error);
-      toast({
-        title: 'Error adding user',
-        description: 'Failed to add new user',
-        variant: 'destructive'
-      });
-    }
-  };
+    return () => {
+      unsubscribeUsers();
+      unsubscribeAgencies();
+      unsubscribeUrls();
+      unsubscribeTasks();
+      unsubscribeReports();
+      unsubscribeWaves();
+      unsubscribeReportCategories();
+    };
+  }, [toast]);
 
-  const assignTask = async (taskData: Omit<Task, 'id' | 'status' | 'comments' | 'urlProgressDetails'>) => {
-    try {
-      // Generate new numeric ID
-      let maxId = 0;
-      tasks.forEach(task => {
-        const numericId = Number(task.id); // Convert task.id to number
-        if (!isNaN(numericId) && numericId > maxId) {
-          maxId = numericId;
-        }
-      });
-      const newTaskId = maxId + 1;
 
-      const newTask: Task = {
-        ...taskData,
-        id: newTaskId, // Assign the new numeric ID
-        status: 'pending',
-        comments: [],
-        urlProgressDetails: []
-      };
-      // db.addTask expects a Task object where id is a number.
-      // The API layer (api/db/route.ts) will handle converting this number to a string if needed for DB insertion.
-      await db.addTask(newTask);
-      setTasks(prev => [...prev, newTask]);
-      toast({ title: 'Task assigned successfully' });
-    } catch (error) {
-      console.error('Error assigning task:', error);
-      toast({
-        title: 'Error assigning task',
-        description: 'Failed to assign new task',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const updateTaskStatus = async (taskId: number, status: TaskStatus) => {
-    try {
-      await db.updateTask(taskId, { status }); // db.updateTask now expects number
-      setTasks(prev => prev.map(task => 
-        task.id === taskId ? { ...task, status } : task // task.id is number, taskId is number
-      ));
-      toast({ title: 'Task status updated' });
-    } catch (error) {
-      console.error('Error updating task status:', error);
-      toast({
-        title: 'Error updating task status',
-        description: 'Failed to update task status',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const updateUrlProgress = async (
-    taskId: number, // Changed to number
-    urlId: string,
-    newStatus: UrlStatus,
-    newProgressPercentage?: number
-  ) => {
-    try {
-      await db.updateUrlProgress(taskId, urlId, newStatus, newProgressPercentage); // db.updateUrlProgress now expects number
-      setTasks(prev => prev.map(task => {
-        if (task.id !== taskId) return task; // task.id is number, taskId is number
-        const updatedProgress = task.urlProgressDetails?.map(progress =>
-          progress.urlId === urlId
-            ? { ...progress, status: newStatus, progressPercentage: newProgressPercentage }
-            : progress
-        ) || [];
-        return { ...task, urlProgressDetails: updatedProgress };
-      }));
-      toast({ title: 'URL progress updated' });
-    } catch (error) {
-      console.error('Error updating URL progress:', error);
-      toast({
-        title: 'Error updating URL progress',
-        description: 'Failed to update URL progress',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const addTaskComment = async (taskId: number, commentText: string) => {
-    try {
-      const comment: TaskComment = { // TaskComment.taskId is now number
-        id: uuidv4(),
-        taskId: taskId, // Assign number directly
-        text: commentText,
-        timestamp: Date.now()
-      };
-      // db.addTaskComment expects taskId as number, and comment object where comment.taskId is number
-      await db.addTaskComment(taskId, comment);
-      setTasks(prev => prev.map(task =>
-        task.id === taskId // task.id is number, taskId is number
-          // Ensure the comment object added to the state also has taskId as a number
-          ? { ...task, comments: [...(task.comments || []), comment] }
-          : task
-      ));
-      toast({ title: 'Comment added' });
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      toast({
-        title: 'Error adding comment',
-        description: 'Failed to add comment',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const getUrlsForAgency = (agencyId: string) => {
-    return urls.filter(url => url.agencyId === agencyId);
-  };
-
-  const getTasksForUser = (userId: string) => {
-    // This comparison is fine, userId is string, task.userId is string
-    return tasks.filter(task => task.userId === userId);
-  };
-
-  const login = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    if (user) {
-      setActualUser(user);
-      setCurrentUser(user);
-      setCurrentRole(user.role);
+  const login = (username: string, password: string): boolean => {
+    const userToLogin = users.find(u => u.username === username && u.password === password);
+    if (userToLogin) {
+      setActualUser(userToLogin);
+      setCurrentUser(userToLogin);
+      toast({ title: "Login Successful", description: `Welcome, ${userToLogin.name}!` });
       return true;
     }
+    toast({ title: "Login Failed", description: "Invalid username or password.", variant: "destructive" });
     return false;
   };
 
   const logout = () => {
     setActualUser(null);
     setCurrentUser(null);
-    setCurrentRole(null);
+    toast({ title: "Logged Out", description: "You have been logged out." });
   };
 
   const impersonateUser = (targetUserId: string) => {
+    if (actualUser?.role !== 'admin') {
+      toast({ title: "Impersonation Failed", description: "Only admins can impersonate.", variant: "destructive" });
+      return;
+    }
     const targetUser = users.find(u => u.id === targetUserId);
     if (targetUser) {
       setCurrentUser(targetUser);
-      setCurrentRole(targetUser.role);
+      if (targetUser.id === actualUser.id) {
+        toast({ title: "Impersonation Stopped", description: `Viewing as ${actualUser.name} (Admin).`});
+      } else {
+        toast({ title: "Impersonation Started", description: `Now viewing as ${targetUser.name}.`});
+      }
+    } else {
+      toast({ title: "Impersonation Failed", description: "Target user not found.", variant: "destructive" });
     }
   };
 
-  const deleteAgency = async (agencyId: string) => {
+  const addAgency = async (name: string) => {
     try {
-      await db.deleteAgency(agencyId);
-      setAgencies(prev => prev.filter(agency => agency.id !== agencyId));
-      // Also remove associated URLs from state
-      setUrls(prev => prev.filter(url => url.agencyId !== agencyId));
-      toast({ title: 'Agency deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting agency:', error);
-      toast({
-        title: 'Error deleting agency',
-        description: 'Failed to delete agency',
-        variant: 'destructive'
-      });
+      await addDoc(collection(db, 'agencies'), { name });
+      toast({ title: "Agency Added", description: `Agency "${name}" has been added.` });
+    } catch (error: any) {
+      console.error("Error adding agency: ", error);
+      toast({ title: "Error Adding Agency", description: error.message, variant: "destructive" });
     }
   };
 
-  const deleteUrl = async (urlId: string) => {
+  const addWave = async (name: string, number: number, description: string): Promise<string | undefined> => {
     try {
-      await db.deleteUrl(urlId);
-      setUrls(prev => prev.filter(url => url.id !== urlId));
-      toast({ title: 'URL deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting URL:', error);
-      toast({
-        title: 'Error deleting URL',
-        description: 'Failed to delete URL',
-        variant: 'destructive'
-      });
+      const newWave = {
+        name,
+        number,
+        description,
+        createdAt: new Date().toISOString(),
+        status: 'draft' as WaveStatus,
+      };
+      const docRef = await addDoc(collection(db, 'waves'), newWave);
+      toast({ title: "Wave Added", description: `Wave "${name}" has been added as a draft.` });
+      return docRef.id;
+    } catch (error: any) {
+      console.error("Error adding wave: ", error);
+      toast({ title: "Error Adding Wave", description: error.message, variant: "destructive" });
     }
   };
 
-  const deleteUser = async (userId: string) => {
+  const updateWaveStatus = async (waveId: string, status: WaveStatus) => {
     try {
-      await db.deleteUser(userId);
-      setUsers(prev => prev.filter(user => user.id !== userId));
-      // Also remove associated tasks from state
-      setTasks(prev => prev.filter(task => task.userId !== userId));
-      toast({ title: 'User deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      toast({
-        title: 'Error deleting user',
-        description: 'Failed to delete user',
-        variant: 'destructive'
-      });
+        const waveRef = doc(db, 'waves', waveId);
+        await updateDoc(waveRef, { status });
+        toast({ title: "Wave Updated", description: `Wave status changed to "${status}".` });
+    } catch (error: any) {
+        console.error("Error updating wave status: ", error);
+        toast({ title: "Error Updating Wave", description: error.message, variant: "destructive" });
     }
   };
 
-  const deleteTask = async (taskId: number) => {
+  const addReportCategory = async (name: string) => {
     try {
-      await db.deleteTask(taskId); // db.deleteTask now expects number
-      setTasks(prev => prev.filter(task => task.id !== taskId)); // task.id is number, taskId is number
-      toast({ title: 'Task deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting task:', error);
-      toast({
-        title: 'Error deleting task',
-        description: 'Failed to delete task',
-        variant: 'destructive'
-      });
+      await addDoc(collection(db, 'reportCategories'), { name });
+      toast({ title: "Category Added", description: `Category "${name}" has been added.` });
+    } catch (error: any) {
+      console.error("Error adding category: ", error);
+      toast({ title: "Error Adding Category", description: error.message, variant: "destructive" });
     }
   };
 
-  const updateUrlStatus = async (urlId: string, status: UrlStatus, pythonCode?: string, executionOutput?: string) => {
+  const deleteReportCategory = async (categoryId: string) => {
     try {
-      await db.updateUrlStatus(urlId, status, pythonCode, executionOutput);
-      setUrls(prev => prev.map(url =>
-        url.id === urlId
-          ? { ...url, status, pythonCode: pythonCode || url.pythonCode, executionOutput: executionOutput || url.executionOutput }
-          : url
-      ));
-      toast({ title: 'URL status updated' });
-    } catch (error) {
-      console.error('Error updating URL status:', error);
-      toast({
-        title: 'Error updating URL status',
-        description: 'Failed to update URL status',
-        variant: 'destructive'
-      });
+        await deleteDoc(doc(db, 'reportCategories', categoryId));
+        toast({ title: "Category Deleted", description: "The report category has been deleted." });
+    } catch (error: any) {
+        console.error("Error deleting category: ", error);
+        toast({ title: "Error Deleting Category", description: error.message, variant: "destructive" });
     }
   };
 
-  const value = {
-    actualUser,
-    currentUser,
-    currentRole,
-    agencies,
-    addAgency,
-    deleteAgency,
-    urls,
-    addUrl,
-    deleteUrl,
-    updateUrlStatus,
-    users,
-    addUser,
-    deleteUser,
-    tasks,
-    assignTask,
-    deleteTask,
-    updateTaskStatus,
-    updateUrlProgress,
-    addTaskComment,
-    getUrlsForAgency,
-    getTasksForUser,
-    login,
-    logout,
-    impersonateUser,
-    isLoading
+
+  const addUrl = async (link: string, agencyId: string | null) => {
+    try {
+      await addDoc(collection(db, 'urls'), { link, agencyId });
+      toast({ title: "URL Added", description: `URL "${link}" has been added.` });
+    } catch (error: any) {
+      console.error("Error adding URL: ", error);
+      toast({ title: "Error Adding URL", description: error.message, variant: "destructive" });
+    }
   };
+
+  const addUser = async (name: string, username: string, password: string, role: UserRole) => {
+    try {
+      const userQuery = query(collection(db, "users"), where("username", "==", username));
+      const querySnapshot = await getDocs(userQuery);
+      if (!querySnapshot.empty) {
+          toast({ title: "User Exists", description: `User with username "${username}" already exists.`, variant: "destructive" });
+          return;
+      }
+      const newUser: Omit<AppUser, 'id'> = { name, username, password, role };
+      await addDoc(collection(db, 'users'), newUser);
+      toast({ title: "User Added", description: `User "${name}" (${role}) has been added.` });
+    } catch (error: any) {
+      console.error("Error adding user: ", error);
+      toast({ title: "Error Adding User", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const saveWaveAssignments = async (waveId: string, waveDescription: string, assignments: Record<string, WaveAssignment>) => {
+    try {
+        const batch = writeBatch(db);
+        const wave = waves.find(w => w.id === waveId);
+        if (!wave) throw new Error("Wave not found");
+
+        if (wave.description !== waveDescription) {
+            const waveRef = doc(db, 'waves', waveId);
+            batch.update(waveRef, { description: waveDescription });
+        }
+
+        const userIdsWithAssignments = Object.keys(assignments);
+        const existingTasksForWave = tasks.filter(t => t.waveId === waveId);
+
+        for (const userId of userIdsWithAssignments) {
+            const userAssignment = assignments[userId];
+            if (!userAssignment) continue;
+            
+            const allAssignedUrlsForUser = new Set<string>(userAssignment.assignedUrlIds);
+            userAssignment.assignedAgencyIds.forEach(agencyId => {
+                urls.filter(u => u.agencyId === agencyId).forEach(u => allAssignedUrlsForUser.add(u.id));
+            });
+            const allUrlIds = Array.from(allAssignedUrlsForUser);
+
+            const existingTask = existingTasksForWave.find(t => t.userId === userId);
+
+            if (existingTask) {
+                const taskRef = doc(db, 'tasks', existingTask.id);
+                const newProgressDetails = allUrlIds.map(urlId => {
+                    return existingTask.urlProgressDetails?.find(d => d.urlId === urlId) || { urlId, status: 'pending', progressPercentage: 0 };
+                });
+
+                batch.update(taskRef, {
+                    title: `Wave ${wave.number}: ${wave.name}`,
+                    description: waveDescription,
+                    assignedAgencyIds: userAssignment.assignedAgencyIds,
+                    assignedUrlIds: userAssignment.assignedUrlIds,
+                    urlProgressDetails: newProgressDetails,
+                });
+
+            } else {
+                const taskRef = doc(collection(db, 'tasks'));
+                const urlProgressDetails = allUrlIds.map(urlId => ({
+                    urlId, status: 'pending' as UrlStatus, progressPercentage: 0
+                }));
+
+                const newTask: Omit<Task, 'id'> = {
+                    title: `Wave ${wave.number}: ${wave.name}`,
+                    description: waveDescription,
+                    userId,
+                    waveId,
+                    assignedAgencyIds: userAssignment.assignedAgencyIds,
+                    assignedUrlIds: userAssignment.assignedUrlIds,
+                    urlProgressDetails,
+                    status: 'pending',
+                    comments: [],
+                };
+                batch.set(taskRef, newTask);
+            }
+        }
+        
+        const userIdsWithoutAssignments = existingTasksForWave
+            .filter(t => !userIdsWithAssignments.includes(t.userId))
+            .map(t => t.id);
+
+        for (const taskIdToDelete of userIdsWithoutAssignments) {
+            batch.delete(doc(db, 'tasks', taskIdToDelete));
+        }
+
+        await batch.commit();
+        toast({ title: "Assignments Saved", description: "All assignments for this wave have been successfully saved." });
+    } catch (error: any) {
+        console.error("Error saving wave assignments: ", error);
+        toast({ title: "Error Saving Assignments", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const updateTaskStatus = async (taskId: string, status: TaskStatus) => {
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      await updateDoc(taskRef, { status });
+      toast({ title: "Task Updated", description: `Task status changed to "${status}".` });
+    } catch (error: any) {
+      console.error("Error updating task status: ", error);
+      toast({ title: "Error Updating Task", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const updateUrlProgress = async (taskId: string, urlIdToUpdate: string, newStatus: UrlStatus, newProgressPercentage?: number) => {
+    const taskRef = doc(db, 'tasks', taskId);
+    try {
+        const taskSnap = await getDoc(taskRef);
+        if (!taskSnap.exists()) {
+            throw new Error("Task not found");
+        }
+
+        const taskData = taskSnap.data() as Task;
+
+        let allUrlsForTask = new Set<string>(taskData.assignedUrlIds || []);
+        (taskData.assignedAgencyIds || []).forEach(agencyId => {
+            urls.filter(u => u.agencyId === agencyId).forEach(u => allUrlsForTask.add(u.id));
+        });
+
+        let currentProgressDetails = taskData.urlProgressDetails || [];
+        
+        // Ensure all assigned URLs have a progress detail entry
+        allUrlsForTask.forEach(urlId => {
+            if (!currentProgressDetails.some(detail => detail.urlId === urlId)) {
+                currentProgressDetails.push({ urlId: urlId, status: 'pending', progressPercentage: 0 });
+            }
+        });
+
+        let detailToUpdate = currentProgressDetails.find(detail => detail.urlId === urlIdToUpdate);
+
+        if (!detailToUpdate) {
+            // This case should ideally not be hit if the above logic is sound, but as a fallback:
+            detailToUpdate = { urlId: urlIdToUpdate, status: 'pending', progressPercentage: 0 };
+            currentProgressDetails.push(detailToUpdate);
+        }
+
+        // Update the specific URL's progress
+        detailToUpdate.status = newStatus;
+        if (newProgressPercentage !== undefined) {
+            detailToUpdate.progressPercentage = Math.max(0, Math.min(100, newProgressPercentage));
+        }
+        
+        // Auto-adjust progress based on status
+        if (newStatus === 'completed') detailToUpdate.progressPercentage = 100;
+        if (newStatus === 'pending') detailToUpdate.progressPercentage = 0;
+        if (newStatus === 'in-progress' && detailToUpdate.progressPercentage === 100) newStatus = 'completed';
+        if (newStatus === 'in-progress' && detailToUpdate.progressPercentage === 0) newStatus = 'pending';
+
+
+        // Recalculate overall task status
+        let overallStatus: TaskStatus = 'pending';
+        if (currentProgressDetails.length > 0) {
+            const allCompleted = currentProgressDetails.every(d => d.status === 'completed');
+            const anyInProgress = currentProgressDetails.some(d => d.status === 'in-progress');
+
+            if (allCompleted) {
+                overallStatus = 'completed';
+            } else if (anyInProgress) {
+                overallStatus = 'in-progress';
+            } else {
+                 // No items are 'in-progress'. If some are 'pending', the task is 'in-progress' overall.
+                 const anyPending = currentProgressDetails.some(d => d.status === 'pending');
+                 if(anyPending) {
+                     overallStatus = 'in-progress'
+                 }
+            }
+        }
+        
+        await updateDoc(taskRef, {
+            urlProgressDetails: currentProgressDetails,
+            status: overallStatus
+        });
+
+    } catch (error: any) {
+        console.error("Error updating URL progress: ", error);
+        toast({ title: "Error Updating Progress", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const addTaskComment = async (taskId: string, commentText: string) => {
+    if (!currentUser) {
+      toast({ title: "Error", description: "You must be viewing as a user to comment.", variant: "destructive" });
+      return;
+    }
+    const newComment: TaskComment = {
+      id: `comment-${Date.now()}`, 
+      text: commentText,
+      userName: currentUser.name,
+      date: new Date().toISOString(),
+    };
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      const taskSnap = await getDoc(taskRef);
+      if (taskSnap.exists()) {
+        const taskData = taskSnap.data() as Task;
+        const updatedComments = [...(taskData.comments || []), newComment];
+        await updateDoc(taskRef, { comments: updatedComments });
+        toast({ title: "Comment Added", description: "Your comment has been added to the task." });
+      } else {
+        toast({ title: "Error", description: "Task not found.", variant: "destructive" });
+      }
+    } catch (error: any) {
+      console.error("Error adding comment: ", error);
+      toast({ title: "Error Adding Comment", description: error.message, variant: "destructive" });
+    }
+  };
+
+ const saveReport = async (data: Partial<Report> & { agencyId: string; waveId: string; sections: any[] }) => {
+    if (!currentUser) {
+        toast({ title: "Authentication Error", description: "You must be logged in to save a report.", variant: "destructive" });
+        return;
+    }
+
+    const { id, agencyId, waveId, sections, status } = data;
+
+    try {
+        if (id) { // Update existing report
+            const reportRef = doc(db, 'reports', id);
+            await updateDoc(reportRef, {
+                agencyId,
+                waveId,
+                sections,
+                status,
+                updatedAt: new Date().toISOString(),
+            });
+            toast({ title: "Report Updated", description: "Your changes have been saved successfully." });
+        } else { // Create new report
+            const newReport: Omit<Report, 'id'> = {
+                userId: currentUser.id,
+                agencyId,
+                waveId,
+                sections,
+                status: status || 'draft',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            await addDoc(collection(db, 'reports'), newReport);
+            toast({ title: "Report Saved", description: "Your report has been created successfully." });
+        }
+    } catch (error: any) {
+        console.error("Error saving report: ", error);
+        toast({ title: "Error Saving Report", description: error.message, variant: "destructive" });
+    }
+};
+  
+  const getUrlsForAgency = (agencyId: string) => {
+    return urls.filter(url => url.agencyId === agencyId);
+  };
+
+  const getTasksForUser = (userId: string) => {
+    return tasks.filter(task => task.userId === userId);
+  };
+
+  const getReportsForUser = (userId: string) => {
+    return reports.filter(report => report.userId === userId);
+  };
+
 
   return (
-    <AppContext.Provider value={value}>
+    <AppContext.Provider value={{ 
+      actualUser, 
+      currentUser, 
+      currentRole,
+      agencies, addAgency, 
+      urls, addUrl, 
+      users, addUser, 
+      tasks, saveWaveAssignments, updateTaskStatus, updateUrlProgress, addTaskComment,
+      reports, saveReport,
+      waves, addWave, updateWaveStatus,
+      reportCategories, addReportCategory, deleteReportCategory,
+      getUrlsForAgency, getTasksForUser, getReportsForUser,
+      login, logout, impersonateUser,
+      isLoading
+    }}>
       {children}
     </AppContext.Provider>
   );

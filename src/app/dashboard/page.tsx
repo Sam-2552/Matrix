@@ -7,21 +7,20 @@ import { TaskProgressChart } from '@/components/charts/task-progress-chart';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tags, Link2, FileText, Download } from 'lucide-react';
 import Link from 'next/link';
-import { useSession } from "next-auth/react";
 
 export default function UserDashboardPage() {
-  const { getTasksForUser, agencies, urls, currentUser } = useAppContext();
+  const { currentUser, getTasksForUser, agencies, urls } = useAppContext();
   const router = useRouter();
-  const { data: session, status } = useSession();
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/login");
+    if (!currentUser) {
+      router.replace('/login');
     }
-  }, [status, router]);
+  }, [currentUser, router]);
 
-  if (status === "loading" || !currentUser) return <div>Loading...</div>;
-  if (status === "unauthenticated") return null;
+  if (!currentUser) {
+    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
+  }
 
   const userTasks = getTasksForUser(currentUser.id);
   
@@ -39,7 +38,7 @@ export default function UserDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold tracking-tight">Welcome, {currentUser.name || currentUser.email || "User"}!</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Welcome, {currentUser.name}!</h1>
       <p className="text-muted-foreground">Here's an overview of your tasks and activities.</p>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -97,7 +96,7 @@ export default function UserDashboardPage() {
       <TaskProgressChart 
         tasks={userTasks} 
         title="My Task Progress"
-        description={`Overview of tasks assigned to ${currentUser.name || currentUser.email || "User"}`}
+        description={`Overview of tasks assigned to ${currentUser.name}`}
       />
     </div>
   );

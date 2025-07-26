@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -113,3 +114,39 @@ body {
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* React Quill Editor Styles */
+.ql-toolbar {
+  @apply rounded-t-md border-border bg-card;
+}
+.ql-container {
+  @apply rounded-b-md border-border bg-card text-card-foreground;
+  font-size: 1rem;
+}
+.ql-editor {
+  @apply min-h-[150px];
+}
+.ql-snow .ql-stroke {
+  stroke: hsl(var(--foreground));
+}
+.ql-snow .ql-fill {
+  fill: hsl(var(--foreground));
+}
+.ql-snow .ql-picker-label {
+    color: hsl(var(--foreground));
+}
+
+.dark .ql-snow .ql-stroke {
+  stroke: hsl(var(--foreground));
+}
+.dark .ql-snow .ql-fill {
+  fill: hsl(var(--foreground));
+}
+.dark .ql-snow .ql-picker-label {
+    color: hsl(var(--foreground));
+}
+.dark .ql-picker-options {
+    background-color: hsl(var(--card));
+    border-color: hsl(var(--border));
+}
+

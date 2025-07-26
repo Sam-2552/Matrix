@@ -1,243 +1,323 @@
+
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppContext } from '@/components/app-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GanttChartSquare, CheckCircle, User, Briefcase, Link2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
-import type { AppUser, Agency, UrlItem } from '@/types';
+import { GanttChartSquare, CheckCircle, User, Briefcase, Link2, PlusCircle, Trash2, Waves, Save, Check, X } from 'lucide-react';
+import type { AppUser, Agency, UrlItem, Wave, WaveAssignment } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { format } from 'date-fns';
-import { useSession } from "next-auth/react";
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
+// --- Reusable MultiSelect Component ---
+interface MultiSelectProps {
+  options: { value: string; label: string }[];
+  selectedValues: string[];
+  onSelect: (value: string) => void;
+  onDeselect: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+  // New prop to filter out options that are globally assigned
+  globallySelectedValues?: string[];
+}
+
+const MultiSelect: React.FC<MultiSelectProps> = ({ options, selectedValues, onSelect, onDeselect, placeholder = "Select items...", className, globallySelectedValues = [] }) => {
+  const [open, setOpen] = useState(false);
+
+  const handleSelect = (value: string) => {
+    onSelect(value);
+    setOpen(false); // Close on select
+  };
+
+  // Options available for selection in the dropdown
+  // It should show items already selected for the current context
+  // And items that are not globally selected by anyone else
+  const availableOptions = options.filter(option => 
+    selectedValues.includes(option.value) || !globallySelectedValues.includes(option.value)
+  );
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className={cn("w-full justify-between font-normal", className)}
+          >
+            <span className="truncate">{placeholder}</span>
+            <PlusCircle className="ml-2 h-4 w-4 shrink-0 opacity-50"/>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+          <Command>
+            <CommandInput placeholder="Search..." />
+            <CommandList>
+              <CommandEmpty>No items found.</CommandEmpty>
+              <CommandGroup>
+                {availableOptions.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    value={option.label}
+                    onSelect={() => handleSelect(option.value)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", selectedValues.includes(option.value) ? "opacity-100" : "opacity-0")} />
+                    <span className="truncate">{option.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+       <div className="space-x-1 space-y-1">
+        {selectedValues.map(value => {
+            // Now, we use the original 'options' prop which contains all possible items
+            // to find the label. This ensures we always find it, even if it's assigned.
+            const label = options.find(o => o.value === value)?.label || value;
+            return (
+                <span key={value} className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2 py-1 text-xs font-semibold text-foreground">
+                    <span className="truncate" title={label}>{label}</span>
+                    <button onClick={() => onDeselect(value)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
+                        <X className="h-3 w-3"/>
+                    </button>
+                </span>
+            );
+        })}
+       </div>
+    </div>
+  );
+};
+
 
 export default function AssignTaskPage() {
-  const { users, agencies, urls, assignTask, tasks: allTasks, deleteTask } = useAppContext();
-  const { data: session, status } = useSession();
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskDescription, setTaskDescription] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [assignmentType, setAssignmentType] = useState<'agency' | 'urls'>('urls');
-  const [selectedAgencyId, setSelectedAgencyId] = useState<string>('');
-  const [selectedUrlIds, setSelectedUrlIds] = useState<string[]>([]);
+  const { users, agencies, urls, waves, addWave, tasks, saveWaveAssignments, currentUser } = useAppContext();
   const router = useRouter();
+  const { toast } = useToast();
 
-  // Explicitly type Task here for clarity, though it's inferred from useAppContext
-  // const { users, agencies, urls, assignTask, tasks: allTasks, deleteTask }: { tasks: Task[] /* ... other types */ } = useAppContext();
+  const [selectedWaveId, setSelectedWaveId] = useState<string>('');
+  const [waveDescription, setWaveDescription] = useState('');
+  const [newWaveName, setNewWaveName] = useState('');
+  const [assignments, setAssignments] = useState<Record<string, WaveAssignment>>({});
 
+  const availableUsers = useMemo(() => users.filter(u => u.role === 'user'), [users]);
 
-  if (status === "loading") return <div>Loading...</div>;
-  if (status === "unauthenticated") {
-    router.replace("/login");
-    return null;
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/login');
+    } else if (currentUser.role !== 'admin') {
+      router.replace('/dashboard'); 
+    }
+  }, [currentUser, router]);
+  
+  // Effect to load existing assignments when a wave is selected
+  useEffect(() => {
+    if (selectedWaveId) {
+      const waveTasks = tasks.filter(t => t.waveId === selectedWaveId);
+      const existingAssignments: Record<string, WaveAssignment> = {};
+      waveTasks.forEach(task => {
+        existingAssignments[task.userId] = {
+          assignedAgencyIds: task.assignedAgencyIds || [],
+          assignedUrlIds: task.assignedUrlIds || []
+        };
+      });
+      setAssignments(existingAssignments);
+      
+      const wave = waves.find(w => w.id === selectedWaveId);
+      setWaveDescription(wave?.description || '');
+
+    } else {
+      setAssignments({});
+      setWaveDescription('');
+    }
+  }, [selectedWaveId, tasks, waves]);
+
+  if (!currentUser || currentUser.role !== 'admin') {
+    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
   }
 
-  const availableUsers = users.filter(u => u.role === 'user'); // Only assign to regular users
+  // --- Memoized calculations for available items ---
+  const allAssignedAgencyIds = useMemo(() => Object.values(assignments).flatMap(a => a.assignedAgencyIds), [assignments]);
+  const allAssignedUrlIds = useMemo(() => Object.values(assignments).flatMap(a => a.assignedUrlIds), [assignments]);
+  
+  const allAgencyOptions = useMemo(() => agencies.map(a => ({ value: a.id, label: a.name })), [agencies]);
+  
+  const allUrlOptions = useMemo(() => {
+    const assignedAgencyUrlIds = new Set(urls.filter(u => u.agencyId && allAssignedAgencyIds.includes(u.agencyId)).map(u => u.id));
+    // URLs that are assigned via an agency are not available for specific assignment.
+    return urls
+        .filter(u => !assignedAgencyUrlIds.has(u.id))
+        .map(u => ({ value: u.id, label: u.link }));
+  }, [urls, allAssignedAgencyIds]);
 
-  const handleAssignTask = () => {
-    if (!taskTitle.trim() || !selectedUserId) {
-      alert('Please provide a task title and select a user.');
-      return;
-    }
 
-    if (assignmentType === 'agency' && !selectedAgencyId) {
-      alert('Please select an agency to assign.');
-      return;
-    }
-    if (assignmentType === 'urls' && selectedUrlIds.length === 0) {
-      alert('Please select at least one URL to assign.');
-      return;
-    }
-
-    assignTask({
-      title: taskTitle.trim(),
-      description: taskDescription.trim(),
-      userId: selectedUserId,
-      assignedItemType: assignmentType,
-      assignedAgencyId: assignmentType === 'agency' ? selectedAgencyId : undefined,
-      assignedUrlIds: assignmentType === 'urls' ? selectedUrlIds : undefined,
+  // --- Handlers for assignment changes ---
+  const handleAssignItem = (userId: string, itemType: 'agency' | 'url', itemId: string) => {
+    setAssignments(prev => {
+      const userAssignment = prev[userId] || { assignedAgencyIds: [], assignedUrlIds: [] };
+      const field = itemType === 'agency' ? 'assignedAgencyIds' : 'assignedUrlIds';
+      
+      if (!userAssignment[field].includes(itemId)) {
+        return {
+          ...prev,
+          [userId]: {
+            ...userAssignment,
+            [field]: [...userAssignment[field], itemId]
+          }
+        };
+      }
+      return prev;
     });
+  };
 
-    // Reset form
-    setTaskTitle('');
-    setTaskDescription('');
-    setSelectedUserId('');
-    setAssignmentType('urls');
-    setSelectedAgencyId('');
-    setSelectedUrlIds([]);
+  const handleDeselectItem = (userId: string, itemType: 'agency' | 'url', itemId: string) => {
+    setAssignments(prev => {
+      const userAssignment = prev[userId];
+      if (!userAssignment) return prev;
+
+      const field = itemType === 'agency' ? 'assignedAgencyIds' : 'assignedUrlIds';
+      const updatedAssignments = {
+        ...prev,
+        [userId]: {
+          ...userAssignment,
+          [field]: userAssignment[field].filter(id => id !== itemId)
+        }
+      };
+
+      // If user has no assignments left, remove them from the assignments object
+      if (updatedAssignments[userId].assignedAgencyIds.length === 0 && updatedAssignments[userId].assignedUrlIds.length === 0) {
+        delete updatedAssignments[userId];
+      }
+
+      return updatedAssignments;
+    });
+  };
+
+  const handleAddWave = async () => {
+    if (newWaveName.trim()) {
+      const nextWaveNumber = waves.length > 0 ? Math.max(...waves.map(w => w.number)) + 1 : 1;
+      const newWaveId = await addWave(newWaveName.trim(), nextWaveNumber, ''); // Add empty description initially
+      if (newWaveId) {
+          setSelectedWaveId(newWaveId);
+          setNewWaveName('');
+      }
+    }
+  };
+
+  const handleSaveAssignments = async () => {
+    if (!selectedWaveId) {
+      toast({ title: "No Wave Selected", description: "Please select a wave before saving.", variant: "destructive"});
+      return;
+    }
+    await saveWaveAssignments(selectedWaveId, waveDescription, assignments);
   };
   
-  const handleUrlSelection = (urlId: string) => {
-    setSelectedUrlIds(prev => 
-      prev.includes(urlId) ? prev.filter(id => id !== urlId) : [...prev, urlId]
-    );
-  };
-
-  const handleDeleteTask = async (taskId: number) => { // Changed taskId to number
-    if (window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
-      await deleteTask(taskId); // deleteTask from context now expects number
-    }
-  };
-
-  const assignedTasks = allTasks; // allTasks are Task[], so task.id is number
+  const sortedWaves = useMemo(() => waves.sort((a, b) => b.number - a.number), [waves]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight flex items-center"><GanttChartSquare className="mr-2 h-8 w-8 text-primary"/>Assign Tasks</h1>
+        <h1 className="text-3xl font-bold tracking-tight flex items-center"><GanttChartSquare className="mr-2 h-8 w-8 text-primary"/>Manage Wave Assignments</h1>
       </div>
 
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Create New Task Assignment</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label htmlFor="taskTitle" className="block text-sm font-medium text-muted-foreground mb-1">Task Title</label>
-            <Input id="taskTitle" placeholder="e.g., Review Q1 Marketing URLs" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="taskDescription" className="block text-sm font-medium text-muted-foreground mb-1">Task Description (Optional)</label>
-            <Textarea id="taskDescription" placeholder="Detailed instructions for the task..." value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} />
-          </div>
-          <div>
-            <label htmlFor="assignUser" className="block text-sm font-medium text-muted-foreground mb-1">Assign to User</label>
-            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-              <SelectTrigger id="assignUser">
-                <SelectValue placeholder="Select a user" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map(user => (
-                  <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">Assign Item Type</label>
-            <Select value={assignmentType} onValueChange={(value) => setAssignmentType(value as 'agency' | 'urls')}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select assignment type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="urls">Specific URLs</SelectItem>
-                <SelectItem value="agency">Entire Agency (and its URLs)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {assignmentType === 'agency' && (
-            <div>
-              <label htmlFor="assignAgency" className="block text-sm font-medium text-muted-foreground mb-1">Select Agency</label>
-              <Select value={selectedAgencyId} onValueChange={setSelectedAgencyId}>
-                <SelectTrigger id="assignAgency">
-                  <SelectValue placeholder="Select an agency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agencies.map(agency => (
-                    <SelectItem key={agency.id} value={agency.id}>{agency.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {assignmentType === 'urls' && (
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">Select URLs</label>
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="urls-list">
-                  <AccordionTrigger className="text-sm hover:no-underline bg-muted px-3 py-2 rounded-md">
-                    {selectedUrlIds.length > 0 ? `${selectedUrlIds.length} URL(s) selected` : "Choose URLs"}
-                    {selectedUrlIds.length > 0 ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ScrollArea className="h-48 mt-2 border rounded-md p-2">
-                      {urls.length > 0 ? urls.map(url => (
-                        <div key={url.id} className="flex items-center space-x-2 p-1.5 hover:bg-accent rounded-md">
-                          <input 
-                            type="checkbox" 
-                            id={`url-${url.id}`} 
-                            checked={selectedUrlIds.includes(url.id)}
-                            onChange={() => handleUrlSelection(url.id)}
-                            className="form-checkbox h-4 w-4 text-primary border-muted-foreground rounded focus:ring-primary"
-                          />
-                          <label htmlFor={`url-${url.id}`} className="text-sm cursor-pointer flex-grow truncate" title={url.link}>
-                            {url.link} {url.agencyId && `(${agencies.find(a=>a.id===url.agencyId)?.name})`}
-                          </label>
-                        </div>
-                      )) : <p className="text-sm text-muted-foreground p-2">No URLs available. Add URLs in Manage URLs section.</p>}
-                    </ScrollArea>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </div>
-          )}
-          
-          <Button onClick={handleAssignTask} className="w-full md:w-auto">
-            <CheckCircle className="mr-2 h-4 w-4" /> Assign Task
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-md">
-        <CardHeader>
-          <CardTitle>Current Task Assignments</CardTitle>
-          <CardDescription>Overview of all tasks assigned to users.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {assignedTasks.length > 0 ? (
-            <ScrollArea className="h-[calc(100vh-30rem)]">
-              <div className="space-y-4">
-                {assignedTasks.map(task => {
-                  const user = users.find(u => u.id === task.userId);
-                  let assignedItemsContent = "";
-                  if (task.assignedItemType === 'agency') {
-                    const agency = agencies.find(a => a.id === task.assignedAgencyId);
-                    assignedItemsContent = `Agency: ${agency?.name || 'N/A'}`;
-                  } else {
-                    assignedItemsContent = `URLs: ${task.urlProgressDetails?.length || 0}`;
-                  }
-                  // task.id is number, key prop expects string or number.
-                  return (
-                    <Card key={task.id} className="shadow-sm">
-                      <CardHeader>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="text-lg">{task.title}</CardTitle>
-                            <CardDescription>
-                              Assigned to: <span className="font-medium text-foreground">{user?.name || 'N/A'}</span> | Status: <span className={`capitalize font-medium ${task.status === 'completed' ? 'text-green-600' : task.status === 'in-progress' ? 'text-blue-600' : 'text-orange-600'}`}>{task.status}</span>
-                            </CardDescription>
-                          </div>
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={() => handleDeleteTask(task.id)} // task.id is number
-                            className="h-8 w-8 flex-shrink-0"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {task.description && <p className="text-sm text-muted-foreground mb-2">{task.description}</p>}
-                        <p className="text-sm"><span className="font-medium">Assigned:</span> {assignedItemsContent}</p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="space-y-6">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>Step 1: Select or Create a Wave</CardTitle>
+              <CardDescription>All assignments are grouped under a wave. Select an existing one or create a new one to begin.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select value={selectedWaveId} onValueChange={setSelectedWaveId}>
+                    <SelectTrigger><SelectValue placeholder="Select an existing wave..." /></SelectTrigger>
+                    <SelectContent>
+                    {sortedWaves.map(wave => (
+                        <SelectItem key={wave.id} value={wave.id}>Wave {wave.number}: {wave.name}</SelectItem>
+                    ))}
+                    </SelectContent>
+                </Select>
+                <div className="flex space-x-2">
+                    <Input 
+                        placeholder="Or create new wave name..." 
+                        value={newWaveName}
+                        onChange={(e) => setNewWaveName(e.target.value)}
+                    />
+                    <Button onClick={handleAddWave} disabled={!newWaveName.trim()}><PlusCircle className="mr-2 h-4 w-4"/>Create</Button>
+                </div>
               </div>
-            </ScrollArea>
-          ) : (
-            <p className="text-muted-foreground text-center py-8">No tasks have been assigned yet.</p>
-          )}
-        </CardContent>
-      </Card>
+              {selectedWaveId && (
+                 <div>
+                    <label htmlFor="waveDescription" className="block text-sm font-medium text-muted-foreground mb-1">Wave Description (Common for all users)</label>
+                    <Textarea id="waveDescription" placeholder="Add a description or instructions for this wave..." value={waveDescription} onChange={(e) => setWaveDescription(e.target.value)} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+           {selectedWaveId && (
+              <div className="flex justify-end pt-6">
+                  <Button onClick={handleSaveAssignments} className="w-full md:w-auto">
+                      <Save className="mr-2 h-4 w-4" /> Save All Assignments for this Wave
+                  </Button>
+              </div>
+            )}
+        </div>
+
+        {selectedWaveId && (
+          <Card className="shadow-md">
+              <CardHeader>
+                  <CardTitle>Step 2: Assign Work to Users for "{waves.find(w => w.id === selectedWaveId)?.name}"</CardTitle>
+                  <CardDescription>Assign available agencies and URLs to users. Assigned items will be removed from the selection lists.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <ScrollArea className="h-[calc(100vh-32rem)] pr-4">
+                      <div className="space-y-6">
+                          {availableUsers.map(user => (
+                              <Card key={user.id} className="bg-muted/50">
+                                  <CardHeader>
+                                      <CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5 text-primary"/>{user.name}</CardTitle>
+                                  </CardHeader>
+                                  <CardContent className="space-y-4">
+                                      <div>
+                                          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Briefcase className="h-4 w-4"/>Assign Agencies</h4>
+                                          <MultiSelect
+                                              options={allAgencyOptions}
+                                              selectedValues={assignments[user.id]?.assignedAgencyIds || []}
+                                              onSelect={(agencyId) => handleAssignItem(user.id, 'agency', agencyId)}
+                                              onDeselect={(agencyId) => handleDeselectItem(user.id, 'agency', agencyId)}
+                                              placeholder="Select agencies..."
+                                              globallySelectedValues={allAssignedAgencyIds}
+                                          />
+                                      </div>
+                                      <div>
+                                          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Link2 className="h-4 w-4"/>Assign Specific URLs</h4>
+                                          <MultiSelect
+                                              options={allUrlOptions}
+                                              selectedValues={assignments[user.id]?.assignedUrlIds || []}
+                                              onSelect={(urlId) => handleAssignItem(user.id, 'url', urlId)}
+                                              onDeselect={(urlId) => handleDeselectItem(user.id, 'url', urlId)}
+                                              placeholder="Select URLs..."
+                                              globallySelectedValues={allAssignedUrlIds}
+                                          />
+                                      </div>
+                                  </CardContent>
+                              </Card>
+                          ))}
+                      </div>
+                  </ScrollArea>
+              </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

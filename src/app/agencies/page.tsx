@@ -6,17 +6,19 @@ import { useAppContext } from '@/components/app-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tags, Link2 } from 'lucide-react';
-import { useSession } from "next-auth/react";
 
 export default function ViewAgenciesPage() {
-  const { agencies, getUrlsForAgency } = useAppContext();
-  const { data: session, status } = useSession();
+  const { agencies, getUrlsForAgency, currentUser } = useAppContext();
   const router = useRouter();
 
-  if (status === "loading") return <div>Loading...</div>;
-  if (status === "unauthenticated") {
-    router.replace("/login");
-    return null;
+  useEffect(() => {
+    if (!currentUser) {
+      router.replace('/login');
+    }
+  }, [currentUser, router]);
+
+  if (!currentUser) {
+    return <div className="flex items-center justify-center min-h-screen"><p>Loading...</p></div>;
   }
 
   // In a real app, filter agencies based on user's tasks/permissions

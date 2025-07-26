@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -8,7 +9,7 @@ import {
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
 import { 
-  LayoutDashboard, Briefcase, Users, Link2, Tags, FileText, Download, GanttChartSquare
+  LayoutDashboard, Briefcase, Users, Link2, Tags, FileText, Download, GanttChartSquare, FileEdit, Waves, ClipboardList
 } from 'lucide-react';
 import type { UserRole } from '@/types';
 import { useAppContext } from './app-provider';
@@ -27,21 +28,26 @@ const navItems: NavItem[] = [
   { href: '/admin/urls', label: 'Manage URLs', icon: Link2, roles: ['admin'] },
   { href: '/admin/users', label: 'Manage Users', icon: Users, roles: ['admin'] },
   { href: '/admin/tasks/assign', label: 'Assign Tasks', icon: GanttChartSquare, roles: ['admin'] },
+  { href: '/admin/report-config', label: 'Report Config', icon: ClipboardList, roles: ['admin'] },
   
   // User specific links (shown when currentRole is 'user')
   { href: '/dashboard', label: 'My Dashboard', icon: LayoutDashboard, roles: ['user'] },
   { href: '/agencies', label: 'View Agencies', icon: Tags, roles: ['user'] },
-  { href: '/urls', label: 'Assigned URLs', icon: Link2, roles: ['user'] },
+  { href: '/urls', label: 'View My URLs', icon: Link2, roles: ['user'] },
   { href: '/tasks', label: 'My Tasks', icon: FileText, roles: ['user'] },
-  { href: '/download', label: 'Downloads', icon: Download, roles: ['user'] },
+  { href: '/reporting', label: 'My Reports', icon: FileEdit, roles: ['user'] },
+  
+  // Common links (shown for both, if any, or handled by role filtering)
+  // Example: A settings page accessible by both, if roles included ['admin', 'user']
+  { href: '/download', label: 'Download Content', icon: Download, roles: ['user', 'admin'] }, // Made accessible to admin too for example
 ];
 
 export function NavLinks() {
-  const pathname = usePathname() || '';
-  const { currentRole, currentUser } = useAppContext();
-  console.log('NavLinks currentRole:', currentRole);
-  if (!currentRole || !currentUser) {
-    return null;
+  const pathname = usePathname();
+  const { currentRole } = useAppContext(); // currentRole reflects the role of currentUser (actual or impersonated)
+
+  if (!currentRole) {
+    return null; // Or some placeholder if needed when no user is logged in (though sidebar might be hidden)
   }
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(currentRole));
@@ -50,14 +56,12 @@ export function NavLinks() {
     <SidebarMenu>
       {filteredNavItems.map((item) => {
         const Icon = item.icon;
-        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-        
         return (
           <SidebarMenuItem key={item.href}>
             <Link href={item.href} legacyBehavior passHref>
               <SidebarMenuButton
                 asChild
-                isActive={isActive}
+                isActive={pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))}
                 tooltip={{ children: item.label, side: "right", align: "center"}}
               >
                 <a>
